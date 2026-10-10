@@ -13,10 +13,10 @@ from dataclasses import dataclass
 
 import chess
 
-from .classify import QualityVerdict, classify
+from .classify import Quality, QualityVerdict, classify
 from .engine import Analyzer, MoveEval, PositionReport
 from .explain import CoachingFacts, explain
-from .motifs import PIECE_VALUE, MotifReport, build_motifs
+from .motifs import MotifReport, build_motifs, static_exchange_eval
 
 
 @dataclass
@@ -31,31 +31,18 @@ class Coaching:
 
 
 def _is_sacrifice(board_before: chess.Board, move: chess.Move) -> bool:
-    """Rough sacrifice test: a non-capture (or uneven capture) that offers
-    material the opponent can take. Used only to upgrade a best move to
-    'brilliant'; a false negative just means we call it 'best' instead."""
-    mover = board_before.turn
+    """Sacrifice test using Static Exchange Evaluation.
+
+    The move truly sacrifices material only if, after it, the opponent can win
+    material on the landing square (SEE > 0) -- a piece defended well enough
+    (even by a pawn) is not a sacrifice. Used only to upgrade a best move to
+    'brilliant'; a false negative just means we call it 'best' instead.
+    """
     after = board_before.copy(stack=False)
-    moved_piece = board_before.piece_at(move.from_square)
-    if moved_piece is None:
-        return False
-    captured_val = 0
-    if board_before.is_capture(move):
-        if board_before.is_en_passant(move):
-            captured_val = PIECE_VALUE[chess.PAWN]
-        else:
-            cap = board_before.piece_at(move.to_square)
-            captured_val = PIECE_VALUE[cap.piece_type] if cap else 0
     after.push(move)
-    # A mating move is not a "sacrifice" -- the opponent cannot recapture.
     if after.is_checkmate():
-        return False
-    attackers = after.attackers(not mover, move.to_square)
-    if not attackers:
-        return False
-    moved_val = PIECE_VALUE[moved_piece.piece_type]
-    # Offered piece is worth more than what it captured and is attacked.
-    return moved_val - captured_val >= 2
+        return False  # the opponent cannot recapture a mating piece
+    return static_exchange_eval(after, move.to_square) >= 2
 
 
 def coach_move(
@@ -79,7 +66,8 @@ def coach_move(
         played_eval,
         is_sacrifice=_is_sacrifice(board_before, move),
     )
-    motifs: MotifReport = build_motifs(board_before, move, played_eval)
+    good = verdict.quality in (Quality.BRILLIANT, Quality.BEST, Quality.EXCELLENT)
+    motifs: MotifReport = build_motifs(board_before, move, played_eval, is_good=good)
 
     mover = "White" if board_before.turn == chess.WHITE else "Black"
     facts = CoachingFacts(

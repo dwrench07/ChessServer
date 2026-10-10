@@ -70,59 +70,85 @@ def _square_name(sq: int) -> str:
     return chess.square_name(sq)
 
 
-def _cheapest_attacker_value(board: chess.Board, color: chess.Color, sq: int) -> int | None:
-    attackers = board.attackers(color, sq)
-    if not attackers:
-        return None
-    return min(PIECE_VALUE[board.piece_at(a).piece_type] for a in attackers)
+def static_exchange_eval(board: chess.Board, square: int) -> int:
+    """Static Exchange Evaluation on `square` (in pawns).
+
+    Returns the net material the side NOT occupying the square wins by
+    initiating captures there, assuming both sides recapture with their least
+    valuable piece and each stops when continuing would lose material. A
+    positive result means the occupant is effectively hanging (or is a
+    material sacrifice); 0 or negative means the capture doesn't win material.
+
+    This is the standard swap algorithm. It ignores x-ray/discovered
+    attackers and pins -- good enough to tell a real hang from a defended
+    piece, which is what trips up naive attacker/defender counting.
+    """
+    occupant = board.piece_at(square)
+    if occupant is None:
+        return 0
+    b = board.copy(stack=False)
+    side = not occupant.color            # the side that captures first
+    standing = PIECE_VALUE[occupant.piece_type]  # value sitting on the square now
+    gains: list[int] = []
+    while True:
+        attackers = b.attackers(side, square)
+        if not attackers:
+            break
+        from_sq = min(attackers, key=lambda s: PIECE_VALUE[b.piece_at(s).piece_type])
+        mover_val = PIECE_VALUE[b.piece_at(from_sq).piece_type]
+        gains.append(standing)           # `side` captures whatever stands there
+        standing = mover_val             # the capturer now stands on the square
+        b.set_piece_at(square, b.piece_at(from_sq))
+        b.remove_piece_at(from_sq)
+        side = not side
+    # Negamax resolution with stand-pat: each side captures only if it helps.
+    acc = 0
+    for g in reversed(gains):
+        acc = max(0, g - acc)
+    return acc
 
 
 def detect_hanging(board_after: chess.Board, mover: chess.Color) -> list[Motif]:
-    """Find mover's pieces that the opponent can win on the next move.
+    """Find mover's pieces the opponent can actually win material on.
 
-    Lightweight static check (not a full Static Exchange Evaluation): a piece
-    is flagged when an enemy attacks it and either nothing defends it, or the
-    cheapest attacker is worth less than the piece. Good enough to say "your
-    knight on d4 is attacked by a pawn and undefended".
+    Uses Static Exchange Evaluation, so a piece defended adequately (even by
+    a pawn) is NOT flagged, and a piece attacked by a cheaper piece IS.
     """
-    opp = not mover
-    out: list[Motif] = []
+    out: list[tuple[int, Motif]] = []
     for sq, piece in board_after.piece_map().items():
         if piece.color != mover or piece.piece_type == chess.KING:
             continue
-        attackers = board_after.attackers(opp, sq)
-        if not attackers:
-            continue
-        defenders = board_after.attackers(mover, sq)
-        cheapest = min(PIECE_VALUE[board_after.piece_at(a).piece_type] for a in attackers)
-        pv = PIECE_VALUE[piece.piece_type]
-        if not defenders or cheapest < pv:
-            how = "undefended" if not defenders else f"attacked by a cheaper piece"
-            out.append(
-                Motif(
-                    kind="hangs_piece",
-                    tactical=True,
-                    text=f"the {_NAME[piece.piece_type]} on {_square_name(sq)} is {how}",
-                )
-            )
-    # Report the most valuable hanging piece first.
-    out.sort(key=lambda m: m.text, reverse=True)
-    return out[:2]
+        gain = static_exchange_eval(board_after, sq)
+        if gain > 0:
+            defenders = board_after.attackers(mover, sq)
+            how = "undefended" if not defenders else "inadequately defended"
+            out.append((gain, Motif(
+                kind="hangs_piece",
+                tactical=True,
+                text=f"the {_NAME[piece.piece_type]} on {_square_name(sq)} is {how} "
+                     f"(loses ~{gain})",
+            )))
+    # Report the costliest hang first.
+    out.sort(key=lambda t: t[0], reverse=True)
+    return [m for _, m in out[:2]]
 
 
 def detect_fork(board_after: chess.Board, move: chess.Move, mover: chess.Color) -> list[Motif]:
-    """Detect a simple fork: the moved piece now attacks 2+ valuable targets."""
+    """Detect a simple fork: the moved piece attacks 2+ valuable targets.
+
+    Skipped if the forking piece is itself hanging (SEE > 0) -- a "fork" that
+    the opponent answers by just capturing the forker is not a real fork.
+    """
     piece = board_after.piece_at(move.to_square)
     if piece is None or piece.color != mover:
         return []
+    if static_exchange_eval(board_after, move.to_square) > 0:
+        return []  # the forking piece can simply be taken
     opp = not mover
     targets = []
     for tsq in board_after.attacks(move.to_square):
         tp = board_after.piece_at(tsq)
         if tp and tp.color == opp and PIECE_VALUE[tp.piece_type] >= 3:
-            # Only count if we actually win it (target not adequately defended
-            # by something that makes the capture bad); keep it simple: count
-            # king and higher-value-than-attacker targets.
             if tp.piece_type == chess.KING or PIECE_VALUE[tp.piece_type] > PIECE_VALUE[piece.piece_type]:
                 targets.append(_NAME[tp.piece_type])
     if len(targets) >= 2:
@@ -197,11 +223,18 @@ def build_motifs(
     board_before: chess.Board,
     move: chess.Move,
     played_eval: MoveEval,
+    *,
+    is_good: bool = False,
 ) -> MotifReport:
     """Assemble the full motif report for a played move.
 
     `played_eval.pv` is the opponent's refutation line (the PV of the position
-    *after* the move), which we use for the material-swing and refutation text.
+    *after* the move), used for the material-swing and refutation text.
+
+    `is_good` says the engine rated this move best/excellent. When true we do
+    NOT narrate it with blunder motifs (a hanging piece / lost material is then
+    an intentional, sound sacrifice), which would otherwise read as if a good
+    move were a mistake.
     """
     mover = board_before.turn
     san = board_before.san(move)
@@ -217,8 +250,27 @@ def build_motifs(
 
     motifs: list[Motif] = []
 
-    # Allowing a forced mate is the most important thing to say, ahead of
-    # any material count.
+    if is_good:
+        # Positive framing only. If the engine's best move gives up material,
+        # name it as a sound sacrifice and show the line it justifies.
+        sac = static_exchange_eval(board_after, move.to_square)
+        if sac >= 2 and played_eval.pv_san:
+            line = " ".join(played_eval.pv_san[:4])
+            motifs.append(Motif(
+                "sound_sacrifice", True,
+                f"it soundly sacrifices ~{sac} point(s); the engine's line is {line}",
+            ))
+        motifs += detect_fork(board_after, move, mover)
+        if board_after.is_check():
+            motifs.append(Motif("gives_check", True, "it gives check"))
+        if board_before.is_capture(move) and sac <= 0:
+            motifs.append(Motif("captures", True, "it wins material"))
+        motifs += static_features(board_before, move)
+        return MotifReport(move_san=san, motifs=motifs)
+
+    # --- a sub-par move: explain the concrete downside first ---
+
+    # Allowing a forced mate is the most important thing to say.
     if played_eval.mate_in is not None and played_eval.mate_in < 0 and played_eval.pv_san:
         n = abs(played_eval.mate_in)
         line = " ".join(played_eval.pv_san[:4])
@@ -227,14 +279,10 @@ def build_motifs(
             f"it allows a forced mate in {n} ({line})",
         ))
 
-    # --- most salient tactical consequences first ---
-    # For a bad move, "you lose material / the piece hangs" teaches far more
-    # than "it gives check", so these lead.
     motifs += detect_fork(board_after, move, mover)
     motifs += detect_hanging(board_after, mover)
 
     # The refutation: the concrete material the opponent wins in the main line.
-    # Skip it if we already reported a forced mate (material count is moot then).
     allows_mate = any(m.kind == "allows_mate" for m in motifs)
     loss = material_swing_on_line(board_after, played_eval.pv, mover)
     if loss > 0 and played_eval.pv_san and not allows_mate:
