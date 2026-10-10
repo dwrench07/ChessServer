@@ -15,13 +15,18 @@ Environment (same as the CLI):
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import os
 import threading
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import chess
+import chess.pgn
 
+from chesscoach import store
+from chesscoach.accuracy import accuracy_from_cp, game_accuracy
 from chesscoach.classify import Quality, classify
 from chesscoach.coach import _is_sacrifice
 from chesscoach.engine import Analyzer, find_stockfish
@@ -92,13 +97,18 @@ def coach_payload(board: chess.Board, move: chess.Move, use_llm: bool) -> dict:
     refute_from = refute_to = None
     if played.pv:
         refute_from, refute_to = _sq(played.pv[0].from_square), _sq(played.pv[0].to_square)
+    # Primary mistake motif (the leading concrete fact), used for dashboard tags.
+    tag = next((m.kind for m in motifs.motifs if m.tactical), None)
 
     payload = {
         "san": san,
+        "fenBefore": board.fen(),
         "quality": verdict.quality.value,
         "glyph": verdict.quality.glyph,
         "cpLoss": verdict.cp_loss,
         "evalAfter": round(played.score_cp / 100.0, 1),
+        "evalCp": played.score_cp,
+        "tag": tag,
         "isBest": verdict.is_best_move,
         "playedFrom": _sq(move.from_square),
         "playedTo": _sq(move.to_square),
@@ -161,6 +171,158 @@ def api_hint(body: dict) -> dict:
     return coach_payload(board, best.move, bool(body.get("useLlm", True)))
 
 
+def api_save(body: dict) -> dict:
+    """Save a played game. The client sends the move list it already has;
+    accuracy is computed here from the per-move evals."""
+    moves_in = body.get("moves", [])
+    white_accs, black_accs, records = [], [], []
+    for m in moves_in:
+        acc = None
+        if m.get("cpLoss") is not None and m.get("evalCp") is not None:
+            acc = accuracy_from_cp(int(m["evalCp"]) + int(m["cpLoss"]), int(m["evalCp"]))
+            (white_accs if m["side"] == "white" else black_accs).append(acc)
+        records.append({
+            "ply": m["ply"], "side": m["side"], "san": m["san"], "uci": m.get("uci"),
+            "quality": m.get("quality"), "cp_loss": m.get("cpLoss"),
+            "eval_cp": m.get("evalCp"), "tag": m.get("tag"),
+        })
+    gid = store.save_game({
+        "source": "play",
+        "white": body.get("white", "You" if body.get("humanColor") == "white" else "Stockfish"),
+        "black": body.get("black", "You" if body.get("humanColor") == "black" else "Stockfish"),
+        "result": body.get("result", "*"),
+        "human_color": body.get("humanColor"),
+        "level": body.get("level"),
+        "white_acc": game_accuracy(white_accs),
+        "black_acc": game_accuracy(black_accs),
+        "pgn": body.get("pgn"),
+    }, records)
+    return {"id": gid, "whiteAcc": game_accuracy(white_accs), "blackAcc": game_accuracy(black_accs)}
+
+
+def api_games(body: dict) -> dict:
+    return {"games": store.list_games(int(body.get("limit", 50)))}
+
+
+def api_game(body: dict) -> dict:
+    g = store.get_game(int(body["id"]))
+    if g is None:
+        raise ValueError("Game not found.")
+    return g
+
+
+def api_dashboard(_body: dict) -> dict:
+    return store.dashboard()
+
+
+def api_review(body: dict) -> dict:
+    """Re-analyse a stored game (by id) from its saved PGN, for rich replay."""
+    g = store.get_game(int(body["id"]))
+    if g is None:
+        raise ValueError("Game not found.")
+    if not g.get("pgn"):
+        raise ValueError("This game has no stored PGN to review.")
+    h, review, _records, wa, ba = _analyze_pgn(g["pgn"])
+    return {"id": g["id"], "white": g["white"], "black": g["black"],
+            "result": g["result"], "whiteAcc": wa, "blackAcc": ba, "review": review}
+
+
+def api_delete(body: dict) -> dict:
+    store.delete_game(int(body["id"]))
+    return {"ok": True}
+
+
+def _analyze_pgn(pgn_text: str, movetime: float = 0.18):
+    """Analyse every ply of a game. Returns (headers, review, records,
+    white_acc, black_acc) without storing anything."""
+    game = chess.pgn.read_game(io.StringIO(pgn_text))
+    if game is None:
+        raise ValueError("Could not parse any game from that PGN.")
+    board = game.board()
+    white_accs, black_accs, records, review = [], [], [], []
+    ply = 0
+    for move in game.mainline_moves():
+        ply += 1
+        side = "white" if board.turn == chess.WHITE else "black"
+        num = board.fullmove_number
+        c = coach_payload_fast(board, move, movetime)
+        eval_cp = c["evalCp"]
+        acc = accuracy_from_cp(eval_cp + c["cpLoss"], eval_cp)
+        (white_accs if side == "white" else black_accs).append(acc)
+        records.append({"ply": ply, "side": side, "san": c["san"], "uci": move.uci(),
+                        "quality": c["quality"], "cp_loss": c["cpLoss"],
+                        "eval_cp": eval_cp, "tag": c["tag"]})
+        c.update({"ply": ply, "side": side, "moveNumber": num, "accuracy": round(acc, 1)})
+        review.append(c)
+        board.push(move)
+    return game.headers, review, records, game_accuracy(white_accs), game_accuracy(black_accs)
+
+
+def _review_pgn(pgn_text: str, source: str, movetime: float = 0.18,
+                human_name: str | None = None) -> dict:
+    h, review, records, wa, ba = _analyze_pgn(pgn_text, movetime)
+    # If we know which player is the learner, tag their side for the dashboard.
+    human_color = None
+    if human_name:
+        low = human_name.lower()
+        if h.get("White", "").lower() == low:
+            human_color = "white"
+        elif h.get("Black", "").lower() == low:
+            human_color = "black"
+    gid = store.save_game({
+        "source": source, "white": h.get("White", "?"), "black": h.get("Black", "?"),
+        "result": h.get("Result", "*"), "human_color": human_color, "level": None,
+        "white_acc": wa, "black_acc": ba, "pgn": pgn_text,
+    }, records)
+    return {"id": gid, "white": h.get("White", "?"), "black": h.get("Black", "?"),
+            "result": h.get("Result", "*"), "whiteAcc": wa, "blackAcc": ba, "review": review}
+
+
+def coach_payload_fast(board: chess.Board, move: chess.Move, movetime: float) -> dict:
+    """Like coach_payload but at a lower movetime for bulk game review."""
+    global _movetime
+    prev = _movetime
+    try:
+        _movetime = movetime
+        with _engine_lock:
+            get_analyzer().movetime_s = movetime
+        return coach_payload(board, move, use_llm=False)
+    finally:
+        _movetime = prev
+        with _engine_lock:
+            get_analyzer().movetime_s = prev
+
+
+def api_import_pgn(body: dict) -> dict:
+    pgn = (body.get("pgn") or "").strip()
+    if not pgn:
+        raise ValueError("Paste a PGN first.")
+    return _review_pgn(pgn, "pgn")
+
+
+def api_import_lichess(body: dict) -> dict:
+    user = (body.get("username") or "").strip()
+    if not user:
+        raise ValueError("Enter a Lichess username.")
+    n = max(1, min(5, int(body.get("max", 1))))
+    url = f"https://lichess.org/api/games/user/{user}?max={n}&pgnInJson=false"
+    req = urllib.request.Request(url, headers={"Accept": "application/x-chess-pgn",
+                                               "User-Agent": "chesscoach/0.1"})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            pgn_text = resp.read().decode("utf-8")
+    except Exception as e:
+        raise ValueError(f"Could not fetch from Lichess: {e}")
+    if not pgn_text.strip():
+        raise ValueError(f"No public games found for '{user}'.")
+    # Import just the most recent game for now (one review per request).
+    first = chess.pgn.read_game(io.StringIO(pgn_text))
+    if first is None:
+        raise ValueError("Lichess returned no parseable game.")
+    exporter = chess.pgn.StringExporter(headers=True, variations=False, comments=False)
+    return _review_pgn(first.accept(exporter), "lichess", human_name=user)
+
+
 def _parse_move(board: chess.Board, body: dict) -> chess.Move:
     if body.get("uci"):
         move = chess.Move.from_uci(body["uci"])
@@ -179,6 +341,14 @@ ROUTES = {
     "/api/move": api_move,
     "/api/engine": api_engine,
     "/api/hint": api_hint,
+    "/api/save": api_save,
+    "/api/games": api_games,
+    "/api/game": api_game,
+    "/api/dashboard": api_dashboard,
+    "/api/review": api_review,
+    "/api/delete": api_delete,
+    "/api/import/pgn": api_import_pgn,
+    "/api/import/lichess": api_import_lichess,
 }
 
 _CONTENT_TYPES = {".html": "text/html", ".js": "application/javascript",

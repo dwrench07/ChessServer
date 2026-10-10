@@ -38,14 +38,17 @@ services:
       CHESSCOACH_MODEL: ${CHESSCOACH_MODEL:-qwen2.5:7b-instruct}
       OLLAMA_URL: http://ollama:11434
       CHESSCOACH_STOCKFISH: /usr/games/stockfish
+      CHESSCOACH_DB: /data/chesscoach_games.db   # stored games persist in a volume
     ports:
       - "127.0.0.1:8000:8000"   # the web UI
     # Bind-mount the repo so code edits apply without rebuilding the image.
     volumes:
       - ./:/app
+      - chesscoach-data:/data
     stdin_open: true   # keep STDIN open for the interactive `play` mode via exec
     tty: true
     restart: unless-stopped
 
 volumes:
   ollama-models:
+  chesscoach-data:

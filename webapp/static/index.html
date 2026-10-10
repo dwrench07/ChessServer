@@ -13,79 +13,129 @@
   <div class="wrap">
     <header class="top">
       <h1>chesscoach</h1>
-      <span class="sub">play &amp; learn — the engine decides, the coach explains</span>
+      <nav class="nav">
+        <button class="navbtn" data-view="play" aria-current="true">Play</button>
+        <button class="navbtn" data-view="dash">Dashboard</button>
+      </nav>
       <span class="health" id="health" title="engine / model status"></span>
     </header>
 
-    <div class="grid">
-      <!-- Board column -->
-      <section class="boardcol">
-        <div class="board-wrap" id="boardWrap">
-          <div class="board" id="board"></div>
-          <svg class="arrows" id="arrows" viewBox="0 0 80 80" preserveAspectRatio="none" aria-hidden="true">
-            <defs>
-              <marker id="ah" markerWidth="4" markerHeight="4" refX="2.1" refY="2" orient="auto">
-                <path d="M0,0 L4,2 L0,4 z" fill="context-stroke"/>
-              </marker>
-            </defs>
-          </svg>
-          <div class="promo" id="promo" hidden></div>
-        </div>
-        <div class="statusline" id="statusline">Your move.</div>
-        <div class="controls">
-          <button class="ctl" id="newBtn">New game</button>
-          <button class="ctl" id="undoBtn">Undo</button>
-          <button class="ctl" id="hintBtn">Hint</button>
-          <button class="ctl" id="flipBtn">Flip</button>
-          <button class="ctl" id="refBtn" aria-pressed="false" disabled>Show punishment</button>
-        </div>
-        <div class="legend">
-          <span style="color:var(--accent)"><i></i>engine's best</span>
-          <span style="color:var(--good)"><i></i>played</span>
-          <span style="color:var(--blunder)"><i></i>punishment</span>
-        </div>
-      </section>
-
-      <!-- Side column -->
-      <section class="sidecol">
-        <div class="panel" id="panel">
-          <p class="empty">Make a move and your coaching appears here — a verdict from
-            Stockfish and the reason behind it. Play a weak move on purpose to see the
-            punishment line.</p>
-        </div>
-
-        <div class="settings">
-          <div class="field">
-            <label for="colorSel">You play</label>
-            <select id="colorSel">
-              <option value="white" selected>White</option>
-              <option value="black">Black</option>
-            </select>
+    <!-- ============ PLAY VIEW ============ -->
+    <section data-view="play">
+      <div class="grid">
+        <div class="boardcol">
+          <div class="boardrow">
+            <div class="evalbar" id="evalbar" title="engine evaluation (white advantage)">
+              <div class="evalfill" id="evalfill"></div>
+            </div>
+            <div class="board-wrap" id="boardWrap">
+              <div class="board" id="board"></div>
+              <svg class="arrows" id="arrows" viewBox="0 0 80 80" preserveAspectRatio="none" aria-hidden="true">
+                <defs>
+                  <marker id="ah" markerWidth="4" markerHeight="4" refX="2.1" refY="2" orient="auto">
+                    <path d="M0,0 L4,2 L0,4 z" fill="context-stroke"/>
+                  </marker>
+                </defs>
+              </svg>
+              <div class="promo" id="promo" hidden></div>
+            </div>
           </div>
-          <div class="field">
-            <label for="levelSel">Engine level</label>
-            <select id="levelSel">
-              <option value="1">1 — easy</option>
-              <option value="2">2</option>
-              <option value="3" selected>3</option>
-              <option value="4">4</option>
-              <option value="5">5</option>
-              <option value="6">6</option>
-              <option value="8">8 — hard</option>
-            </select>
+          <div class="statusline" id="statusline">Your move.</div>
+          <div class="controls">
+            <button class="ctl" id="newBtn">New game</button>
+            <button class="ctl" id="undoBtn">Undo</button>
+            <button class="ctl" id="hintBtn">Hint</button>
+            <button class="ctl" id="flipBtn">Flip</button>
+            <button class="ctl" id="refBtn" aria-pressed="false" disabled>Show punishment</button>
           </div>
-          <div class="field checkbox">
-            <input type="checkbox" id="llmChk" checked>
-            <label for="llmChk" id="llmLabel">Use local LLM for explanations</label>
+          <div class="legend">
+            <span style="color:var(--accent)"><i></i>engine's best</span>
+            <span style="color:var(--good)"><i></i>played</span>
+            <span style="color:var(--blunder)"><i></i>punishment</span>
+            <span id="accNow"></span>
           </div>
         </div>
 
-        <div class="moves">
-          <h2>Moves</h2>
-          <div class="movegrid" id="movegrid"></div>
+        <div class="sidecol">
+          <div class="panel" id="panel">
+            <p class="empty">Make a move and your coaching appears here — a verdict from
+              Stockfish and the reason behind it. Play a weak move on purpose to see the
+              punishment line. Finished games are saved to your Dashboard.</p>
+          </div>
+          <div class="settings">
+            <div class="field">
+              <label for="colorSel">You play</label>
+              <select id="colorSel"><option value="white" selected>White</option><option value="black">Black</option></select>
+            </div>
+            <div class="field">
+              <label for="levelSel">Engine level</label>
+              <select id="levelSel">
+                <option value="1">1 — easy</option><option value="2">2</option>
+                <option value="3" selected>3</option><option value="4">4</option>
+                <option value="5">5</option><option value="6">6</option><option value="8">8 — hard</option>
+              </select>
+            </div>
+            <div class="field checkbox">
+              <input type="checkbox" id="llmChk" checked>
+              <label for="llmChk" id="llmLabel">Use local LLM for explanations</label>
+            </div>
+          </div>
+          <div class="moves"><h2>Moves</h2><div class="movegrid" id="movegrid"></div></div>
         </div>
-      </section>
-    </div>
+      </div>
+    </section>
+
+    <!-- ============ DASHBOARD VIEW ============ -->
+    <section data-view="dash" hidden>
+      <div class="dashgrid">
+        <div class="dashmain">
+          <div class="import panel">
+            <h2>Import a game</h2>
+            <div class="importrow">
+              <input type="text" id="lichessUser" placeholder="Lichess username" autocomplete="off">
+              <button class="ctl" id="lichessBtn">Fetch latest</button>
+            </div>
+            <details class="pgnbox">
+              <summary>…or paste PGN</summary>
+              <textarea id="pgnText" rows="4" placeholder="1. e4 e5 2. Nf3 ..."></textarea>
+              <button class="ctl" id="pgnBtn">Analyse PGN</button>
+            </details>
+            <div class="importstatus" id="importStatus"></div>
+          </div>
+
+          <div class="reviewcard panel" id="reviewCard" hidden>
+            <div class="reviewhead" id="reviewHead"></div>
+            <div class="reviewboardrow">
+              <div class="board-wrap small" id="dboardWrap">
+                <div class="board" id="dboard"></div>
+                <svg class="arrows" id="darrows" viewBox="0 0 80 80" preserveAspectRatio="none" aria-hidden="true">
+                  <defs><marker id="ah2" markerWidth="4" markerHeight="4" refX="2.1" refY="2" orient="auto">
+                    <path d="M0,0 L4,2 L0,4 z" fill="context-stroke"/></marker></defs>
+                </svg>
+              </div>
+              <div class="reviewside">
+                <div class="panel inner" id="dpanel"></div>
+                <div class="dcontrols">
+                  <button class="ctl" id="dfirst" aria-label="First">⏮</button>
+                  <button class="ctl" id="dprev" aria-label="Previous">◀</button>
+                  <button class="ctl" id="dnext" aria-label="Next">▶</button>
+                  <button class="ctl" id="dlast" aria-label="Last">⏭</button>
+                </div>
+              </div>
+            </div>
+            <div class="movegrid" id="dmovegrid"></div>
+          </div>
+        </div>
+
+        <aside class="dashside">
+          <div class="panel stats" id="statsPanel"><p class="empty">Loading your stats…</p></div>
+          <div class="panel games">
+            <h2>Your games</h2>
+            <div class="gamelist" id="gameList"></div>
+          </div>
+        </aside>
+      </div>
+    </section>
   </div>
   <script src="app.js"></script>
 </body>

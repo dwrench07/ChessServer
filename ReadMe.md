@@ -67,8 +67,15 @@ http://localhost:8000
 ```
 
 Play against Stockfish and get a verdict plus a plain-language reason for each
-of your moves, with best-move and refutation arrows on the board. The CLI is
-still there too:
+of your moves, with best-move and refutation arrows on the board, a live eval
+bar, and your running accuracy. Finished games are saved automatically.
+
+The **Dashboard** tab shows your stored games and patterns — accuracy over
+time, a "where you go wrong" breakdown (hanging pieces, allowed mates, lost
+material…), and move-quality distribution. You can **import** any game by
+pasting a PGN or fetching your latest from **Lichess** by username; imported
+games are analysed move-by-move and replayable with the same coaching and
+arrows. The CLI is still there too:
 
 ```bash
 docker compose exec chesscoach python coach_cli.py play --level 3
@@ -155,6 +162,8 @@ chesscoach/
   explain.py    grounded template + optional Ollama narration ("voice")
   coach.py      wires the pipeline together
 coach_cli.py    CLI (move / pgn / play)
+chesscoach/accuracy.py   win%-based accuracy scoring (Lichess-style)
+chesscoach/store.py      SQLite game storage + dashboard aggregates (stdlib)
 webapp/
   server.py     stdlib HTTP server + JSON API wrapping the pipeline
   static/       the browser board UI (index.html, app.js, styles.css)
