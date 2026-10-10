@@ -30,8 +30,10 @@ from chesscoach.accuracy import accuracy_from_cp, game_accuracy
 from chesscoach.classify import Quality, classify
 from chesscoach.coach import _is_sacrifice
 from chesscoach.engine import Analyzer, find_stockfish
-from chesscoach.explain import CoachingFacts, explain, ollama_available, OLLAMA_MODEL
+from chesscoach.explain import (CoachingFacts, explain, ollama_available,
+                                OLLAMA_MODEL, strategic_explanation)
 from chesscoach.motifs import build_motifs
+from chesscoach.strategy import strategic_brief, plan_from_line, phase as game_phase
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 GOOD = (Quality.BRILLIANT, Quality.BEST, Quality.EXCELLENT)
@@ -171,6 +173,26 @@ def api_hint(body: dict) -> dict:
     return coach_payload(board, best.move, bool(body.get("useLlm", True)))
 
 
+def api_plan(body: dict) -> dict:
+    """Strategic brief for the current position: the long-term plan, not a move."""
+    board = chess.Board(body["fen"])
+    if board.is_game_over():
+        raise ValueError("The game is over — no plan to make.")
+    with _engine_lock:
+        pre = get_analyzer().analyse_position(board, multipv=1)
+    brief = strategic_brief(board)
+    brief.line_theme = plan_from_line(board, pre.best.pv)
+    text, source = strategic_explanation(brief, use_llm=bool(body.get("useLlm", True)))
+    return {
+        "phase": brief.phase, "character": brief.character,
+        "yourPlan": brief.your_plan, "opponentPlan": brief.opponent_plan,
+        "pawnBreaks": brief.pawn_breaks, "improve": brief.improve,
+        "lineTheme": brief.line_theme, "text": text, "source": source,
+        "bestFrom": _sq(pre.best.move.from_square), "bestTo": _sq(pre.best.move.to_square),
+        "bestSan": pre.best.san,
+    }
+
+
 def api_save(body: dict) -> dict:
     """Save a played game. The client sends the move list it already has;
     accuracy is computed here from the per-move evals."""
@@ -222,9 +244,10 @@ def api_review(body: dict) -> dict:
         raise ValueError("Game not found.")
     if not g.get("pgn"):
         raise ValueError("This game has no stored PGN to review.")
-    h, review, _records, wa, ba = _analyze_pgn(g["pgn"])
+    h, review, _records, wa, ba, summary = _analyze_pgn(g["pgn"])
     return {"id": g["id"], "white": g["white"], "black": g["black"],
-            "result": g["result"], "whiteAcc": wa, "blackAcc": ba, "review": review}
+            "result": g["result"], "whiteAcc": wa, "blackAcc": ba,
+            "review": review, "strategicSummary": summary}
 
 
 def api_delete(body: dict) -> dict:
@@ -252,15 +275,54 @@ def _analyze_pgn(pgn_text: str, movetime: float = 0.18):
         records.append({"ply": ply, "side": side, "san": c["san"], "uci": move.uci(),
                         "quality": c["quality"], "cp_loss": c["cpLoss"],
                         "eval_cp": eval_cp, "tag": c["tag"]})
-        c.update({"ply": ply, "side": side, "moveNumber": num, "accuracy": round(acc, 1)})
+        c.update({"ply": ply, "side": side, "moveNumber": num, "accuracy": round(acc, 1),
+                  "phase": game_phase(board)})
         review.append(c)
         board.push(move)
-    return game.headers, review, records, game_accuracy(white_accs), game_accuracy(black_accs)
+    return (game.headers, review, records, game_accuracy(white_accs),
+            game_accuracy(black_accs), _strategic_summary(review))
+
+
+def _strategic_summary(review: list[dict]) -> dict:
+    """Whole-game strategic story from the per-move review: accuracy by phase,
+    the turning point, and a one-line narrative."""
+    phases = {"opening": {"white": [], "black": []},
+              "middlegame": {"white": [], "black": []},
+              "endgame": {"white": [], "black": []}}
+    for c in review:
+        phases[c["phase"]][c["side"]].append(c["accuracy"])
+    phase_acc = {}
+    for ph, sides in phases.items():
+        entry = {}
+        for s in ("white", "black"):
+            if sides[s]:
+                entry[s] = round(sum(sides[s]) / len(sides[s]), 1)
+        if entry:
+            phase_acc[ph] = entry
+
+    turning = None
+    worst = -1
+    for c in review:
+        if c["quality"] in ("mistake", "blunder") and c["cpLoss"] > worst:
+            worst = c["cpLoss"]
+            turning = {"moveNumber": c["moveNumber"], "side": c["side"], "san": c["san"],
+                       "quality": c["quality"], "phase": c["phase"]}
+
+    bits = []
+    for ph in ("opening", "middlegame", "endgame"):
+        if ph in phase_acc:
+            vals = phase_acc[ph]
+            bits.append(f"{ph} " + "/".join(f"{vals[s]:.0f}%" for s in ("white", "black") if s in vals))
+    text = "Accuracy by phase — " + "; ".join(bits) + "." if bits else ""
+    if turning:
+        text += (f" The turning point was {turning['side']}'s {turning['quality']} "
+                 f"{turning['san']} ({turning['phase']}).")
+    return {"phaseAccuracy": phase_acc, "turningPoint": turning, "text": text.strip()}
 
 
 def _review_pgn(pgn_text: str, source: str, movetime: float = 0.18,
                 human_name: str | None = None) -> dict:
-    h, review, records, wa, ba = _analyze_pgn(pgn_text, movetime)
+    h, review, records, wa, ba, summary = _analyze_pgn(pgn_text, movetime)
     # If we know which player is the learner, tag their side for the dashboard.
     human_color = None
     if human_name:
@@ -275,7 +337,8 @@ def _review_pgn(pgn_text: str, source: str, movetime: float = 0.18,
         "white_acc": wa, "black_acc": ba, "pgn": pgn_text,
     }, records)
     return {"id": gid, "white": h.get("White", "?"), "black": h.get("Black", "?"),
-            "result": h.get("Result", "*"), "whiteAcc": wa, "blackAcc": ba, "review": review}
+            "result": h.get("Result", "*"), "whiteAcc": wa, "blackAcc": ba,
+            "review": review, "strategicSummary": summary}
 
 
 def coach_payload_fast(board: chess.Board, move: chess.Move, movetime: float) -> dict:
@@ -341,6 +404,7 @@ ROUTES = {
     "/api/move": api_move,
     "/api/engine": api_engine,
     "/api/hint": api_hint,
+    "/api/plan": api_plan,
     "/api/save": api_save,
     "/api/games": api_games,
     "/api/game": api_game,

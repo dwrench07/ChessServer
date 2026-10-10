@@ -106,25 +106,41 @@
   // ================= PLAY =================
   var P = { fen:START, orient:"white", human:"white", level:3, useLlm:true,
     moves:[], legal:[], sel:null, last:null, coaching:null, showRef:false, busy:false,
-    humanAccs:[], evalWhiteCp:0, saved:false };
+    humanAccs:[], evalWhiteCp:0, saved:false, plan:null };
   var el = function(id){ return document.getElementById(id); };
   var pboard=el("board"), parrows=el("arrows"), ppanel=el("panel"),
       pstatus=el("statusline"), pmoves=el("movegrid"), promo=el("promo"), refBtn=el("refBtn");
 
   function pTargets(from){ var o=[]; P.legal.forEach(function(u){ if(u.slice(0,2)===from)o.push(u.slice(2,4)); }); return o; }
   function renderPlay(){
+    var arrows = [];
+    if (P.coaching) arrows = coachArrows(P.coaching, P.showRef);
+    else if (P.plan && P.plan.bestFrom) arrows = [{from:P.plan.bestFrom,to:P.plan.bestTo,color:cvar("--accent"),dashed:true}];
     drawBoard(pboard, P.fen, P.orient, { sel:P.sel, last:P.last,
       targets: P.sel?pTargets(P.sel):null, onClick:onSquareClick });
-    drawArrows(parrows, P.orient, P.coaching?coachArrows(P.coaching,P.showRef):[]);
+    drawArrows(parrows, P.orient, arrows);
     renderPanel(); renderMoves(); renderEval(); renderAcc();
   }
   function renderPanel(){
+    if (P.plan){ ppanel.innerHTML = planHTML(P.plan); refBtn.disabled=true; return; }
     if (!P.coaching){ ppanel.innerHTML='<p class="empty">Make a move and your coaching appears here.</p>';
       refBtn.disabled=true; return; }
     ppanel.innerHTML = panelHTML(P.coaching, P.showRef);
     refBtn.disabled = !(P.coaching.refuteFrom && !P.coaching.isBest);
     refBtn.setAttribute("aria-pressed", P.showRef?"true":"false");
   }
+  function planHTML(d){
+    var h='<div class="verdict"><span class="badge" style="background:var(--accent)">PLAN · '+esc(d.phase)+'</span>'+
+      '<span class="mv">think ahead</span></div>'+
+      '<p class="why">'+esc(d.text)+'</p><div class="planlist">';
+    if (d.yourPlan && d.yourPlan.length) h+=planRow("Your plan", d.yourPlan.join("; "));
+    if (d.pawnBreaks && d.pawnBreaks.length) h+=planRow("Breaks", d.pawnBreaks.join(", "));
+    if (d.opponentPlan && d.opponentPlan.length) h+=planRow("Watch for", d.opponentPlan.join("; "));
+    h+='</div><div class="panelnote"><span class="srcpill">'+(d.source==="ollama"?"LLM":"template")+
+      '</span> · the dashed arrow is the engine\'s move toward this plan</div>';
+    return h;
+  }
+  function planRow(k,v){ return '<div class="pl"><b>'+k+'</b><span>'+esc(v)+'</span></div>'; }
   function renderMoves(){
     pmoves.innerHTML="";
     P.moves.forEach(function(m){
@@ -152,7 +168,7 @@
   function fullmove(fen){ return parseInt(fen.split(" ")[5],10)||1; }
 
   async function humanMove(uci){
-    if (P.busy) return; P.busy=true; P.sel=null; P.showRef=false;
+    if (P.busy) return; P.busy=true; P.sel=null; P.showRef=false; P.plan=null;
     setStatus("Coach is thinking…",false,true);
     try{
       var num=fullmove(P.fen), side=turnOf(P.fen);
@@ -228,7 +244,7 @@
   async function newGame(){
     if (P.busy) return; P.busy=true;
     P.fen=START; P.moves=[]; P.sel=null; P.last=null; P.coaching=null; P.showRef=false;
-    P.humanAccs=[]; P.evalWhiteCp=0; P.saved=false;
+    P.humanAccs=[]; P.evalWhiteCp=0; P.saved=false; P.plan=null;
     P.human=el("colorSel").value; P.level=parseInt(el("levelSel").value,10); P.orient=P.human;
     renderPlay();
     setStatus("New game. "+(P.human==="white"?"Your move.":"Engine to move…"),false,P.human==="black");
@@ -237,7 +253,7 @@
     P.busy=false;
   }
   async function undo(){
-    if (P.busy || !P.moves.length) return; P.busy=true; P.showRef=false; P.sel=null;
+    if (P.busy || !P.moves.length) return; P.busy=true; P.showRef=false; P.sel=null; P.plan=null;
     P.moves.pop(); if (P.moves.length && turnOf(P.moves[P.moves.length-1].fen)!==P.human) P.moves.pop();
     P.fen = P.moves.length? P.moves[P.moves.length-1].fen : START;
     P.last=null; P.coaching=lastHumanCoaching(); P.saved=false;
@@ -248,11 +264,18 @@
   }
   function lastHumanCoaching(){ for(var i=P.moves.length-1;i>=0;i--) if(P.moves[i].coaching) return P.moves[i].coaching; return null; }
   async function hint(){
-    if (P.busy) return; P.busy=true; P.showRef=false;
+    if (P.busy) return; P.busy=true; P.showRef=false; P.plan=null;
     setStatus("Finding the best move…",false,true);
     try{ var c=await api("/api/hint",{fen:P.fen,useLlm:P.useLlm});
       c.label="Best: "+c.bestSan; c.isBest=true; c.playedFrom=c.bestFrom; c.playedTo=c.bestTo; c.quality="best";
       P.coaching=c; renderPlay(); setStatus("Hint shown — the green arrow is the engine's choice.");
+    }catch(e){ setStatus("Error: "+e.message,true); } P.busy=false;
+  }
+  async function plan(){
+    if (P.busy) return; P.busy=true; P.showRef=false; P.coaching=null;
+    setStatus("Thinking about the plan…",false,true);
+    try{ var d=await api("/api/plan",{fen:P.fen,useLlm:P.useLlm});
+      P.plan=d; renderPlay(); setStatus("Here's the long-term plan for this position.");
     }catch(e){ setStatus("Error: "+e.message,true); } P.busy=false;
   }
   function flip(){ P.orient=P.orient==="white"?"black":"white"; renderPlay(); }
@@ -266,6 +289,9 @@
     var head=el("reviewHead");
     head.innerHTML='<strong>'+esc(data.white)+'</strong> vs <strong>'+esc(data.black)+'</strong> '+esc(data.result)+
       '<span class="acc">W '+(data.whiteAcc!=null?data.whiteAcc+"%":"–")+' · B '+(data.blackAcc!=null?data.blackAcc+"%":"–")+'</span>';
+    var ss=el("stratSummary");
+    if (data.strategicSummary && data.strategicSummary.text){ ss.hidden=false; ss.textContent=data.strategicSummary.text; }
+    else ss.hidden=true;
     renderReview();
     el("reviewCard").scrollIntoView({behavior:"smooth",block:"nearest"});
   }
@@ -387,7 +413,7 @@
 
   // wire up play
   el("newBtn").onclick=newGame; el("undoBtn").onclick=undo; el("hintBtn").onclick=hint;
-  el("flipBtn").onclick=flip; refBtn.onclick=toggleRef;
+  el("flipBtn").onclick=flip; refBtn.onclick=toggleRef; el("planBtn").onclick=plan;
   el("llmChk").onchange=function(e){ P.useLlm=e.target.checked; };
   el("colorSel").onchange=newGame; el("levelSel").onchange=function(e){ P.level=parseInt(e.target.value,10); };
   document.addEventListener("keydown",function(e){

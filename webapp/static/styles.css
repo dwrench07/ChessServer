@@ -148,6 +148,12 @@ button.ctl[aria-pressed="true"]{background:var(--accent);color:#fff;border-color
 .reviewhead{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:12px;font-size:.95rem}
 .reviewhead .acc{font-family:var(--font-mono);font-size:.8rem;color:var(--muted)}
 .dcontrols{display:flex;gap:6px}
+.stratsummary{background:var(--bg);border:1px solid var(--line);border-left:3px solid var(--accent);
+  border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:.86rem;color:var(--fg)}
+.planlist{margin-top:12px;display:grid;gap:6px;font-size:.86rem}
+.planlist .pl{display:flex;gap:8px}
+.planlist .pl b{color:var(--muted);font-weight:600;font-size:.72rem;text-transform:uppercase;
+  letter-spacing:.04em;white-space:nowrap;min-width:84px}
 
 /* stats / charts */
 .statrow{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}

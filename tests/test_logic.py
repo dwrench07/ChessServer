@@ -91,6 +91,20 @@ def test_positional_contrast_explains_quiet_inaccuracy():
     assert contrast(board, best, best) == []
 
 
+def test_strategy_phase_and_brief():
+    from chesscoach.strategy import phase, strategic_brief
+    # start position is opening
+    assert phase(chess.Board()) == "opening"
+    # a bare king-and-pawn ending is an endgame
+    assert phase(chess.Board("8/5pk1/6p1/8/8/1R6/5PPP/6K1 w - - 0 1")) == "endgame"
+    # a middlegame with an open file yields a concrete plan
+    board = chess.Board("r1bq1rk1/pp3ppp/2n1pn2/8/2BP4/2N1PN2/PP3PPP/R1BQ1RK1 b - - 0 10")
+    br = strategic_brief(board)
+    assert br.phase == "middlegame"
+    assert br.your_plan, "expected at least one plan"
+    assert isinstance(br.character, str) and br.character
+
+
 def test_template_never_empty():
     board = chess.Board("4k3/8/8/8/8/8/3Q4/4K3 w - - 0 1")
     move = chess.Move.from_uci("d2d7")

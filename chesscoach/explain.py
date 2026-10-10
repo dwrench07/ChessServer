@@ -193,6 +193,72 @@ def explain(f: CoachingFacts, *, use_llm: bool = True, model: str | None = None)
     return template_explanation(f), "template"
 
 
+_STRAT_SYSTEM = (
+    "You are a chess coach explaining the PLAN in a position to an improving "
+    "club player, in 3-5 short sentences. Teach long-term thinking, not just "
+    "the next move. Rules: use ONLY the facts provided (phase, imbalances, "
+    "plans, pawn breaks); never invent moves, evaluations, or features not "
+    "listed; be concrete about cause and effect. If the facts are thin, say the "
+    "position is quiet and give the general plan, rather than inventing detail."
+)
+
+
+def strategic_template(brief) -> str:
+    """Deterministic strategic narration from a Brief (no LLM)."""
+    parts = [brief.character]
+    if brief.line_theme:
+        parts.append(brief.line_theme[0].upper() + brief.line_theme[1:] + ".")
+    if brief.your_plan:
+        parts.append("Your plan: " + _join(brief.your_plan[:3]) + ".")
+    else:
+        parts.append("Your plan: finish development, put rooks on good files, and improve your worst piece.")
+    if brief.pawn_breaks:
+        parts.append("Pawn breaks to consider: " + ", ".join(brief.pawn_breaks) + ".")
+    if brief.improve:
+        parts.append(brief.improve[0].upper() + brief.improve[1:] + ".")
+    if brief.opponent_plan:
+        parts.append("Watch for your opponent trying to " + _join(brief.opponent_plan[:2]) + ".")
+    return " ".join(parts)
+
+
+def _strategic_facts(brief) -> str:
+    return (
+        f"Phase: {brief.phase}\n"
+        f"Side to move: {brief.side}\n"
+        f"Position character: {brief.character}\n"
+        f"Engine line theme: {brief.line_theme or 'none'}\n"
+        f"Your plans: {'; '.join(brief.your_plan) or 'none detected'}\n"
+        f"Opponent plans: {'; '.join(brief.opponent_plan) or 'none detected'}\n"
+        f"Candidate pawn breaks: {', '.join(brief.pawn_breaks) or 'none'}\n"
+        f"Piece to improve: {brief.improve or 'none'}\n"
+    )
+
+
+def strategic_explanation(brief, *, use_llm: bool = True, model: str | None = None) -> tuple[str, str]:
+    """Return (text, source) narrating the strategic brief."""
+    if use_llm:
+        try:
+            payload = {
+                "model": model or OLLAMA_MODEL, "stream": False,
+                "options": {"temperature": 0.3},
+                "messages": [
+                    {"role": "system", "content": _STRAT_SYSTEM},
+                    {"role": "user", "content": _strategic_facts(brief) + "\nWrite the plan now."},
+                ],
+            }
+            req = urllib.request.Request(
+                f"{OLLAMA_URL}/api/chat", data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"}, method="POST")
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            content = data.get("message", {}).get("content", "").strip()
+            if content:
+                return content, "ollama"
+        except Exception:
+            pass
+    return strategic_template(brief), "template"
+
+
 def _join(items) -> str:
     items = list(items)
     if not items:
