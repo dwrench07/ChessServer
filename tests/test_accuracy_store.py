@@ -67,6 +67,11 @@ def test_store_roundtrip_and_dashboard():
     g = store.get_game(gid)
     assert g["result"] == "1-0" and len(g["moves"]) == 2
 
+    # recurring-mistake lookup sees the human's tagged blunder
+    ts = store.tag_stats("hangs_piece")
+    assert ts["games"] >= 1 and ts["total"] >= 1
+    assert store.tag_stats("no_such_tag")["games"] == 0
+
     dash = store.dashboard()
     assert dash["gameCount"] >= 1
     assert dash["record"]["wins"] >= 1

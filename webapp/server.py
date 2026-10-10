@@ -145,10 +145,28 @@ def api_legal(body: dict) -> dict:
     return st
 
 
+TAG_PHRASES = {
+    "hangs_piece": "left a piece hanging", "allows_mate": "allowed a forced mate",
+    "refuted": "lost material to a tactic", "fork": "walked into a fork",
+    "gives_check": "played a loose check", "captures": "made a bad capture",
+}
+
+
 def api_move(body: dict) -> dict:
     board = chess.Board(body["fen"])
     move = _parse_move(board, body)
-    return coach_payload(board, move, bool(body.get("useLlm", True)))
+    # In Play, every /api/move is the human's own move, so personalise it.
+    c = coach_payload(board, move, bool(body.get("useLlm", True)))
+    if c["quality"] in ("inaccuracy", "mistake", "blunder") and c.get("tag"):
+        st = store.tag_stats(c["tag"])
+        if st["games"] >= 1:
+            phrase = TAG_PHRASES.get(c["tag"], "made this kind of mistake")
+            c["recurring"] = {
+                "games": st["games"], "total": st["total"],
+                "text": f"You've {phrase} in {st['games']} of your last "
+                        f"{st['total']} game{'s' if st['total'] != 1 else ''} — a recurring pattern.",
+            }
+    return c
 
 
 def api_engine(body: dict) -> dict:

@@ -96,7 +96,9 @@
       '<p class="why">'+esc(c.explanation)+'</p><div class="lines">';
     h+=lineRow(c.isBest?"Line":"Best", c.isBest?c.bestLine.join(" "):(c.bestSan+"  —  "+c.bestLine.join(" ")));
     if (c.refuteFrom && !c.isBest) h+=lineRow("If played", c.refuteLine.join(" "));
-    h+='</div><div class="panelnote"><span class="srcpill">'+src+'</span>';
+    h+='</div>';
+    if (c.recurring) h+='<div class="recurring">↻ '+esc(c.recurring.text)+'</div>';
+    h+='<div class="panelnote"><span class="srcpill">'+src+'</span>';
     if (showRef) h+=" · showing the reply to "+esc(c.san)+" in red";
     h+="</div>";
     return h;

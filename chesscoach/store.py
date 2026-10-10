@@ -125,6 +125,28 @@ def delete_game(game_id: int) -> None:
         conn.execute("DELETE FROM games WHERE id=?", (game_id,))
 
 
+def tag_stats(tag: str) -> dict:
+    """How often the learner has made a mistake of this motif before.
+
+    Counts only the human's side of played games, and only moves graded
+    inaccuracy/mistake/blunder. Used to tell a player they are repeating a
+    known pattern. The current (unsaved) game is naturally excluded.
+    """
+    with _conn() as conn:
+        rows = conn.execute(
+            """SELECT DISTINCT m.game_id, g.created_at
+                 FROM moves m JOIN games g ON g.id = m.game_id
+                WHERE g.human_color IS NOT NULL AND m.side = g.human_color
+                  AND m.tag = ? AND m.quality IN ('inaccuracy','mistake','blunder')""",
+            (tag,),
+        ).fetchall()
+        total = conn.execute(
+            "SELECT COUNT(*) AS c FROM games WHERE human_color IS NOT NULL"
+        ).fetchone()["c"]
+    return {"games": len(rows), "total": total,
+            "last": max((r["created_at"] for r in rows), default=None)}
+
+
 def dashboard(human_only: bool = True) -> dict:
     """Aggregate stats across stored games for the dashboard.
 
