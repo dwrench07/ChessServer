@@ -21,6 +21,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+EXPOSE 8000
 ENTRYPOINT ["/app/docker/entrypoint.sh"]
-# Keep the container alive so you can `docker compose exec` into the CLI.
-CMD ["sleep", "infinity"]
+# Launch the web UI; the CLI is still available via `docker compose exec`.
+CMD ["python", "-m", "webapp.server", "--host", "0.0.0.0", "--port", "8000"]

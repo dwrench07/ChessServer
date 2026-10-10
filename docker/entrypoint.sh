@@ -31,8 +31,7 @@ else
 fi
 
 echo "[chesscoach] ready."
-echo "            Analyse a move : docker compose exec chesscoach python coach_cli.py move --fen '<FEN>' --san <move>"
-echo "            Review a game  : docker compose exec chesscoach python coach_cli.py pgn game.pgn"
-echo "            Play & learn   : docker compose exec chesscoach python coach_cli.py play --level 3"
+echo "            Web UI  : open http://localhost:8000 in your browser"
+echo "            CLI too : docker compose exec chesscoach python coach_cli.py play --level 3"
 
 exec "$@"

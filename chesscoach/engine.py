@@ -164,6 +164,31 @@ class Analyzer:
             alternatives=evals,
         )
 
+    def best_reply(
+        self,
+        board: chess.Board,
+        *,
+        skill_level: int = 20,
+        movetime: float | None = None,
+    ) -> chess.Move:
+        """Pick a move for the engine to *play* (as an opponent).
+
+        `skill_level` (0-20) weakens move selection only; it is restored to full
+        strength immediately after, so any later analysis stays trustworthy.
+        """
+        limit = chess.engine.Limit(time=movetime or self.movetime_s)
+        try:
+            self._engine.configure({"Skill Level": max(0, min(20, skill_level))})
+            result = self._engine.play(board, limit)
+        finally:
+            try:
+                self._engine.configure({"Skill Level": 20})
+            except chess.engine.EngineError:
+                pass
+        if result.move is None:
+            raise RuntimeError("Engine returned no move to play.")
+        return result.move
+
     def evaluate_after(self, board: chess.Board, move: chess.Move) -> MoveEval:
         """Evaluate the position that results from `move`.
 

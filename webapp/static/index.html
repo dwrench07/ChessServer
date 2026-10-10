@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>chesscoach</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=JetBrains+Mono:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="wrap">
+    <header class="top">
+      <h1>chesscoach</h1>
+      <span class="sub">play &amp; learn — the engine decides, the coach explains</span>
+      <span class="health" id="health" title="engine / model status"></span>
+    </header>
+
+    <div class="grid">
+      <!-- Board column -->
+      <section class="boardcol">
+        <div class="board-wrap" id="boardWrap">
+          <div class="board" id="board"></div>
+          <svg class="arrows" id="arrows" viewBox="0 0 80 80" preserveAspectRatio="none" aria-hidden="true">
+            <defs>
+              <marker id="ah" markerWidth="4" markerHeight="4" refX="2.1" refY="2" orient="auto">
+                <path d="M0,0 L4,2 L0,4 z" fill="context-stroke"/>
+              </marker>
+            </defs>
+          </svg>
+          <div class="promo" id="promo" hidden></div>
+        </div>
+        <div class="statusline" id="statusline">Your move.</div>
+        <div class="controls">
+          <button class="ctl" id="newBtn">New game</button>
+          <button class="ctl" id="undoBtn">Undo</button>
+          <button class="ctl" id="hintBtn">Hint</button>
+          <button class="ctl" id="flipBtn">Flip</button>
+          <button class="ctl" id="refBtn" aria-pressed="false" disabled>Show punishment</button>
+        </div>
+        <div class="legend">
+          <span style="color:var(--accent)"><i></i>engine's best</span>
+          <span style="color:var(--good)"><i></i>played</span>
+          <span style="color:var(--blunder)"><i></i>punishment</span>
+        </div>
+      </section>
+
+      <!-- Side column -->
+      <section class="sidecol">
+        <div class="panel" id="panel">
+          <p class="empty">Make a move and your coaching appears here — a verdict from
+            Stockfish and the reason behind it. Play a weak move on purpose to see the
+            punishment line.</p>
+        </div>
+
+        <div class="settings">
+          <div class="field">
+            <label for="colorSel">You play</label>
+            <select id="colorSel">
+              <option value="white" selected>White</option>
+              <option value="black">Black</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="levelSel">Engine level</label>
+            <select id="levelSel">
+              <option value="1">1 — easy</option>
+              <option value="2">2</option>
+              <option value="3" selected>3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+              <option value="8">8 — hard</option>
+            </select>
+          </div>
+          <div class="field checkbox">
+            <input type="checkbox" id="llmChk" checked>
+            <label for="llmChk" id="llmLabel">Use local LLM for explanations</label>
+          </div>
+        </div>
+
+        <div class="moves">
+          <h2>Moves</h2>
+          <div class="movegrid" id="movegrid"></div>
+        </div>
+      </section>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

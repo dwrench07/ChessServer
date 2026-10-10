@@ -1,7 +1,11 @@
 # One command to run the whole stack locally:
 #
-#   docker compose up -d --build      # starts Ollama + app, auto-pulls the model
+#   docker compose up -d --build      # starts Ollama + the web app, auto-pulls the model
 #   docker compose logs -f chesscoach # watch the first-run model download
+#   # then open the board in your browser:
+#   open http://localhost:8000        # (Linux: xdg-open; Windows: start)
+#
+# The CLI is still available too:
 #   docker compose exec chesscoach python coach_cli.py play --level 3
 #
 # The LLM model is cached in the `ollama-models` named volume, so it only
@@ -34,10 +38,12 @@ services:
       CHESSCOACH_MODEL: ${CHESSCOACH_MODEL:-qwen2.5:7b-instruct}
       OLLAMA_URL: http://ollama:11434
       CHESSCOACH_STOCKFISH: /usr/games/stockfish
+    ports:
+      - "127.0.0.1:8000:8000"   # the web UI
     # Bind-mount the repo so code edits apply without rebuilding the image.
     volumes:
       - ./:/app
-    stdin_open: true   # keep STDIN open for the interactive `play` mode
+    stdin_open: true   # keep STDIN open for the interactive `play` mode via exec
     tty: true
     restart: unless-stopped
 
