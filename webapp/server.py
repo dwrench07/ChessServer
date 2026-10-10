@@ -292,7 +292,13 @@ def api_game(body: dict) -> dict:
 
 
 def api_dashboard(_body: dict) -> dict:
-    return store.dashboard()
+    from chesscoach import analytics
+    data = store.dashboard()
+    try:
+        data.update(analytics.compute(store.all_games_with_moves()))
+    except Exception:
+        pass  # analytics are best-effort; never break the dashboard
+    return data
 
 
 def api_review(body: dict) -> dict:

@@ -347,14 +347,36 @@
     if (qk.length){ var qmax=Math.max.apply(null,qk.map(function(k){return q[k];}));
       h+='<div class="charttitle">Your move quality</div>';
       qk.forEach(function(k){ h+=bar(k, q[k], qmax, cvar(QVAR[k])); }); }
+    // accuracy by phase
+    var ph=d.accuracyByPhase||{}, phk=["opening","middlegame","endgame"].filter(function(k){return ph[k]!=null;});
+    if (phk.length){ h+='<div class="charttitle">Accuracy by phase</div>';
+      phk.forEach(function(k){ h+=bar(k, ph[k], 100, cvar("--accent"), "%"); }); }
+    // performance by opening
+    if (d.byOpening && d.byOpening.length){
+      h+='<div class="charttitle">By opening</div><div class="oplist">';
+      d.byOpening.forEach(function(o){
+        h+='<div class="oprow"><span class="opn">'+esc(o.opening)+'</span>'+
+           '<span class="opm">'+o.games+'g'+(o.accuracy!=null?' · '+o.accuracy+'%':'')+
+           (o.score!=null?' · '+o.score+'% score':'')+'</span></div>'; });
+      h+='</div>';
+    }
+    // weakness trend (older -> recent)
+    if (d.weaknessTrend && d.weaknessTrend.length){
+      h+='<div class="charttitle">Weakness trend (older → recent)</div>';
+      d.weaknessTrend.forEach(function(t){
+        var arrow = t.recent>t.older?'<span style="color:var(--blunder)">↑</span>'
+                  : t.recent<t.older?'<span style="color:var(--best)">↓</span>':'→';
+        h+='<div class="barrow"><span class="lbl">'+esc(TAGLABEL[t.tag]||t.tag)+'</span>'+
+           '<span class="val" style="width:auto;flex:1">'+t.older+' → '+t.recent+' '+arrow+'</span></div>'; });
+    }
     if (!d.gameCount) h='<h2>Your patterns</h2><p class="empty">No games yet. Play a game or import one — your patterns show up here.</p>';
     el("statsPanel").innerHTML=h;
   }
   function tile(n,l){ return '<div class="stattile"><div class="n">'+esc(String(n))+'</div><div class="l">'+esc(l)+'</div></div>'; }
-  function bar(label,val,max,color){
+  function bar(label,val,max,color,suffix){
     var pct=Math.round(val/max*100);
     return '<div class="barrow"><span class="lbl">'+esc(label)+'</span><span class="track">'+
-      '<span class="fill" style="width:'+pct+'%;background:'+color+'"></span></span><span class="val">'+val+'</span></div>';
+      '<span class="fill" style="width:'+pct+'%;background:'+color+'"></span></span><span class="val">'+val+(suffix||"")+'</span></div>';
   }
   function sparkline(trend){
     var w=300,h=70,pad=6, n=trend.length;

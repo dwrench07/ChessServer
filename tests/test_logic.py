@@ -105,6 +105,15 @@ def test_strategy_phase_and_brief():
     assert isinstance(br.character, str) and br.character
 
 
+def test_opening_classifier():
+    from chesscoach.analytics import name_opening
+    assert name_opening(["e4", "e5", "Nf3", "Nc6", "Bb5"]) == "Ruy Lopez"
+    assert name_opening(["e4", "e5", "Nf3", "Nc6", "Bc4"]) == "Italian Game"
+    assert name_opening(["e4", "c5"]) == "Sicilian Defense"
+    assert name_opening(["d4", "d5", "c4"]) == "Queen's Gambit"
+    assert name_opening(["g4"]) == "Irregular"
+
+
 def test_template_never_empty():
     board = chess.Board("4k3/8/8/8/8/8/3Q4/4K3 w - - 0 1")
     move = chess.Move.from_uci("d2d7")

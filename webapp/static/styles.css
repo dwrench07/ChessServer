@@ -169,6 +169,11 @@ button.ctl[aria-pressed="true"]{background:var(--accent);color:#fff;border-color
 .barrow .fill{height:100%;border-radius:4px}
 .barrow .val{width:26px;flex:none;text-align:right;font-family:var(--font-mono);font-size:.74rem;color:var(--muted)}
 svg.trend{width:100%;height:90px;display:block}
+.oplist{display:flex;flex-direction:column;gap:3px}
+.oprow{display:flex;justify-content:space-between;gap:8px;font-size:.78rem;padding:3px 0;border-bottom:1px solid var(--line)}
+.oprow:last-child{border-bottom:none}
+.oprow .opn{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.oprow .opm{font-family:var(--font-mono);color:var(--muted);white-space:nowrap;font-size:.72rem}
 
 .gamelist{display:flex;flex-direction:column;gap:6px;max-height:420px;overflow-y:auto}
 .grow{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;background:var(--bg);

@@ -119,6 +119,20 @@ def get_game(game_id: int) -> dict | None:
         return out
 
 
+def all_games_with_moves() -> list[dict]:
+    """Every game with its moves attached (two queries), for analytics."""
+    with _conn() as conn:
+        games = [dict(r) for r in conn.execute("SELECT * FROM games ORDER BY created_at").fetchall()]
+        by_id = {g["id"]: g for g in games}
+        for g in games:
+            g["moves"] = []
+        for m in conn.execute("SELECT * FROM moves ORDER BY game_id, ply").fetchall():
+            g = by_id.get(m["game_id"])
+            if g is not None:
+                g["moves"].append(dict(m))
+        return games
+
+
 def delete_game(game_id: int) -> None:
     with _conn() as conn:
         conn.execute("DELETE FROM moves WHERE game_id=?", (game_id,))
