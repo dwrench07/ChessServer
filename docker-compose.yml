@@ -1,0 +1,45 @@
+# One command to run the whole stack locally:
+#
+#   docker compose up -d --build      # starts Ollama + app, auto-pulls the model
+#   docker compose logs -f chesscoach # watch the first-run model download
+#   docker compose exec chesscoach python coach_cli.py play --level 3
+#
+# The LLM model is cached in the `ollama-models` named volume, so it only
+# downloads once -- subsequent `up`s are instant.
+#
+# Change the explanation model (e.g. a smaller/faster one on a CPU laptop):
+#   CHESSCOACH_MODEL=qwen2.5:3b-instruct docker compose up -d
+
+services:
+  ollama:
+    image: ollama/ollama:0.5.7
+    volumes:
+      - ollama-models:/root/.ollama
+    # Expose on localhost only if you also want to reach it from the host.
+    ports:
+      - "127.0.0.1:11434:11434"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  chesscoach:
+    build: .
+    depends_on:
+      ollama:
+        condition: service_started
+    environment:
+      CHESSCOACH_MODEL: ${CHESSCOACH_MODEL:-qwen2.5:7b-instruct}
+      OLLAMA_URL: http://ollama:11434
+      CHESSCOACH_STOCKFISH: /usr/games/stockfish
+    # Bind-mount the repo so code edits apply without rebuilding the image.
+    volumes:
+      - ./:/app
+    stdin_open: true   # keep STDIN open for the interactive `play` mode
+    tty: true
+    restart: unless-stopped
+
+volumes:
+  ollama-models:
