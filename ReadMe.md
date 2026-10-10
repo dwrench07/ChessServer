@@ -1,148 +1,128 @@
-This list breaks down the development of your chess teaching application into manageable steps, focusing on integrating a chess library and an LLM for analysis and suggestions, while acknowledging the use of Lichess's open-source components.
-
-Phase 1: Core Chess Game Functionality (Leveraging Lichess/Existing Libraries)
-Set up Basic HTML Structure:
-
-Create the main index.html file.
-
-Include necessary meta tags (viewport, charset).
-
-Link to Tailwind CSS CDN for styling.
-
-Utilize Lichess's existing UI components or integrate standard chess libraries (Chessboard.js, Chess.js) as a foundation for the board and pieces.
-
-Initialize Chessboard and Game Logic:
-
-Integrate Chessboard.js (or a Lichess UI component) to display the board.
-
-Integrate Chess.js (or Lichess's underlying game logic) for game logic (move validation, game state, PGN/FEN handling).
-
-Set up the initial board position.
-
-Implement Player Moves:
-
-Leverage existing drag-and-drop functionality from Chessboard.js or Lichess's UI.
-
-Utilize Chess.js (or Lichess's logic) to handle move validation.
-
-Update the board state after a valid move.
-
-Handle illegal moves (snap back pieces).
-
-Display Game Information:
-
-Show whose turn it is (White/Black).
-
-Display the current game status (e.g., "Game in progress", "Checkmate", "Stalemate").
-
-Maintain and display a list of moves made in PGN format or a simple move list.
-
-Basic Game Controls:
-
-Add a "New Game" button to reset the board.
-
-Add an "Undo Last Move" button.
-
-Phase 2: LLM Integration for Game Evaluation
-Set up Gemini API Call Function:
-
-Create a JavaScript function to make fetch calls to the Gemini API (gemini-2.0-flash).
-
-Handle API key integration (using the apiKey variable as an empty string for Canvas environment).
-
-Implement try-catch for error handling during API calls.
-
-Add a loading indicator while the LLM is processing.
-
-Design LLM Prompt for Move Evaluation:
-
-Formulate a clear and concise prompt that includes:
-
-The current FEN or PGN of the game.
-
-The specific move just made (or the current position to evaluate).
-
-Instructions for the LLM to classify the move (e.g., "blunder", "mistake", "inaccuracy", "good", "excellent", "brilliant", "perfect").
-
-Request a brief explanation for the evaluation.
-
-Consider providing examples of what constitutes each move type for better LLM consistency.
-
-Implement Move Evaluation Feature:
-
-Add an "Analyze Move" button (or trigger evaluation automatically after each user move).
-
-When clicked/triggered, send the current game state (FEN/PGN) and the last move to the LLM API.
-
-Parse the LLM's JSON response (if structured, or text if unstructured).
-
-Display the evaluation (e.g., "Excellent move!") and the explanation in a dedicated area on the UI.
-
-Phase 3: LLM Integration for Move Suggestions
-Design LLM Prompt for Move Suggestion:
-
-Formulate a prompt that includes:
-
-The current FEN or PGN of the game.
-
-The current player to move.
-
-Instructions for the LLM to suggest the "best" move in standard algebraic notation.
-
-Request a detailed explanation of why it's a good move, including strategic and tactical considerations.
-
-Implement Move Suggestion Feature:
-
-Add a "Get Hint" button.
-
-When clicked, send the current game state to the LLM API.
-
-Parse the LLM's response to extract the suggested move and its explanation.
-
-Display the suggested move (e.g., "Consider playing e4") and the detailed explanation in a dedicated UI section.
-
-Optionally, highlight the suggested move on the board (e.g., by drawing an arrow or highlighting squares).
-
-Phase 4: User Experience & Refinements
-Improve UI Layout and Styling:
-
-Use Tailwind CSS to create a clean, responsive layout.
-
-Ensure the chessboard is centrally located and appropriately sized.
-
-Style buttons, text areas, and information panels for readability and aesthetics.
-
-Add rounded corners and shadows to elements for a modern look.
-
-Ensure good contrast and typography (Inter font).
-
-Error Handling and User Feedback:
-
-Display user-friendly messages for API errors or network issues.
-
-Provide clear loading states for LLM interactions.
-
-Implement a custom message box for alerts instead of alert().
-
-Game State Management:
-
-Ensure robust handling of various game endings (checkmate, stalemate, draws by repetition, insufficient material, 50-move rule).
-
-Display appropriate messages for each game end state.
-
-Code Organization and Comments:
-
-Organize JavaScript code into logical functions.
-
-Add extensive comments to explain logic, API calls, and UI updates.
-
-Future Enhancements (Beyond Initial Scope)
-Saving/Loading Games: Integrate Firestore to save game history and evaluations for later review.
-
-User Authentication: Allow users to create accounts and track their progress.
-
-Multiple Game Modes: Add options for playing against an AI (Stockfish.js) or another human.
-
-Interactive Tutorials: Use the LLM to generate small, interactive chess puzzles or lessons.
-
-Visual Blunder/Good Move Indicators: Visually mark blunders or excellent moves on the board after evaluation.
+# chesscoach — a local chess tutor that explains *why*, not just +/−
+
+A fully local prototype that coaches your chess by explaining, in plain
+language, **why** a move is good or bad — the refutation line, the hanging
+piece, the missed fork — instead of only showing a centipawn number.
+
+## The one idea that makes it work
+
+> **The engine thinks. The language model talks. The language model is never
+> allowed to invent the numbers.**
+
+Two jobs that look like one but aren't:
+
+| Job | Who does it | Why |
+|---|---|---|
+| *Is this move good? What's best? By how much?* | **Stockfish** (search + calculation) | LLMs play weak chess — they hallucinate illegal moves and confidently misjudge positions. Letting an LLM grade moves would teach bad chess. |
+| *Why, in human terms?* | **A small local LLM** (narration only) | Given the engine's facts, it turns them into intuitive prose. It can't fabricate the verdict because it's handed the verdict. |
+
+Between them sits a **motif layer** that converts the position and the engine's
+lines into human chess concepts (hanging piece, fork, check, lost castling,
+the refutation line, decisive swing), so the explanation is concrete.
+
+```
+ played move ─► Stockfish ─► classify ─► motifs ─► explain ─► coaching text
+                (truth)      (quality)   (why)      (voice)
+```
+
+## What it does today (v1, CLI)
+
+- Grades any move as `best / excellent / good / inaccuracy / mistake / blunder`
+  (plus `brilliant` for sound sacrifices), from the engine's centipawn loss.
+- Explains the move with **concrete, verifiable facts**: the refutation line,
+  material won, the hanging piece, forced mate, and the better alternative.
+- **Two explainers**, chosen automatically:
+  - **Ollama** (local LLM) for friendly prose — default `qwen2.5:7b-instruct`.
+  - a **deterministic template** fallback that is hallucination-proof and
+    needs no model. If Ollama isn't running, it's used automatically.
+- Three CLI modes: single move, whole-PGN review, and play-vs-Stockfish with
+  live coaching on your moves.
+
+## Honest limits (read this)
+
+- **Tactical "why" is reliable.** It comes from forcing lines the engine
+  actually calculates. Trust it.
+- **Positional "why" is softer.** Modern NNUE engines are black boxes: they
+  know a quiet move is +0.4 but can't say why in words. Those explanations are
+  the LLM's interpretation — useful, but occasionally hand-wavy. The motif
+  layer tags facts as tactical vs positional so the two aren't conflated.
+- A 7B model on CPU narrates in a few seconds — fine for turn-based study, not
+  for real-time blitz.
+
+## Setup (Linux / macOS, incl. AMD Ryzen laptops — CPU is fine)
+
+```bash
+# 1. Python deps
+pip install -r requirements.txt
+
+# 2. Stockfish (the source of truth)
+#    Debian/Ubuntu:  sudo apt install stockfish
+#    macOS:          brew install stockfish
+#    or a static build from https://stockfishchess.org/download/
+#    If it's not on PATH, point to it:
+export CHESSCOACH_STOCKFISH=/path/to/stockfish
+
+# 3. (Optional) Local LLM for nicer prose
+#    Install Ollama from https://ollama.com, then:
+ollama pull qwen2.5:7b-instruct
+#    Without this, the deterministic template explainer is used automatically.
+```
+
+## Usage
+
+```bash
+# Coach one move from a position
+python coach_cli.py move \
+  --fen "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2" \
+  --san Nf3
+
+# Review a whole game (only noteworthy moves unless --all)
+python coach_cli.py pgn game.pgn
+python coach_cli.py pgn game.pgn --side white --all
+
+# Play against Stockfish and get coached on every move you make
+python coach_cli.py play --level 3 --color white
+
+# Force the no-LLM, deterministic explainer
+python coach_cli.py --no-llm move --fen "<FEN>" --san Qh5
+```
+
+Useful flags: `--movetime 0.5` (engine seconds per analysis),
+`--depth 16` (fixed depth instead of time), `--model <ollama-model>`.
+
+## Configuration (environment variables)
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `CHESSCOACH_STOCKFISH` | *(PATH search)* | Path to the Stockfish binary |
+| `CHESSCOACH_MODEL` | `qwen2.5:7b-instruct` | Ollama model for narration |
+| `OLLAMA_URL` | `http://localhost:11434` | Ollama endpoint |
+
+## Project layout
+
+```
+chesscoach/
+  engine.py     Stockfish wrapper — the ONLY source of evals and best moves
+  classify.py   centipawn-loss → move quality
+  motifs.py     position + engine lines → human chess concepts ("why")
+  explain.py    grounded template + optional Ollama narration ("voice")
+  coach.py      wires the pipeline together
+coach_cli.py    CLI (move / pgn / play)
+tests/          engine-independent unit tests (run without Stockfish/Ollama)
+```
+
+## Running the tests
+
+```bash
+python tests/test_logic.py        # or: python -m pytest tests/ -q
+```
+
+## Roadmap
+
+- Web UI (local server + board) once the coaching text is tuned — the CLI is
+  the proving ground first, by design.
+- Richer motif detection (pins, discovered attacks, outposts, pawn structure).
+- Opening-book / endgame-tablebase awareness so early and trivial positions
+  aren't over-analysed.
+- Optional fine-tuned explainer model (only after the grounded pipeline proves
+  its value — not a starting requirement).

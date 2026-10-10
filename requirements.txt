@@ -1,0 +1,4 @@
+# Python dependencies for the chesscoach prototype.
+# The explanation layer talks to Ollama over plain HTTP via the stdlib, so
+# there is no `requests`/`ollama` package requirement here.
+chess>=1.10,<2
