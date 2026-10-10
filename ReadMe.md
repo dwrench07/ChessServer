@@ -51,19 +51,28 @@ the refutation line, decisive swing), so the explanation is concrete.
 
 ## Quick start with Docker (recommended — nothing to install but Docker)
 
-This bundles the engine, the app, **and** Ollama, and **auto-downloads the LLM
-model** on first run into a cached volume. You don't install or pull anything
-by hand.
+This bundles the engine, the **web board UI**, the app, **and** Ollama, and
+**auto-downloads the LLM model** on first run into a cached volume. You don't
+install or pull anything by hand.
 
 ```bash
 docker compose up -d --build          # start everything; model pulls automatically
 docker compose logs -f chesscoach     # watch the one-time model download, then Ctrl-C
+```
 
-# then use any mode:
+Then open the board in your browser:
+
+```
+http://localhost:8000
+```
+
+Play against Stockfish and get a verdict plus a plain-language reason for each
+of your moves, with best-move and refutation arrows on the board. The CLI is
+still there too:
+
+```bash
 docker compose exec chesscoach python coach_cli.py play --level 3
 docker compose exec chesscoach python coach_cli.py pgn game.pgn
-docker compose exec chesscoach python coach_cli.py move \
-  --fen "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2" --san Nf3
 ```
 
 - First `up` downloads the model (a few GB for the default 7B). It's cached in
@@ -74,6 +83,18 @@ docker compose exec chesscoach python coach_cli.py move \
 - Stop everything: `docker compose down` (add `-v` to also delete the model cache).
 
 Prefer running it directly on your machine instead? Use the manual setup below.
+
+## Web UI without Docker
+
+```bash
+pip install -r requirements.txt
+sudo apt install stockfish            # macOS: brew install stockfish
+python -m webapp.server               # then open http://localhost:8000
+```
+
+The server is stdlib-only (no web framework). Ollama is optional — without it,
+the UI automatically falls back to the deterministic template explainer and
+says so. Flags: `--port 9000`, `--host 0.0.0.0`, `--movetime 0.5`.
 
 ## Setup without Docker (Linux / macOS, incl. AMD Ryzen laptops — CPU is fine)
 
@@ -134,9 +155,12 @@ chesscoach/
   explain.py    grounded template + optional Ollama narration ("voice")
   coach.py      wires the pipeline together
 coach_cli.py    CLI (move / pgn / play)
+webapp/
+  server.py     stdlib HTTP server + JSON API wrapping the pipeline
+  static/       the browser board UI (index.html, app.js, styles.css)
 tests/          engine-independent unit tests (run without Stockfish/Ollama)
-Dockerfile          app image (Python + python-chess + Stockfish)
-docker-compose.yml  app + Ollama, with auto model pull into a cached volume
+Dockerfile          app image (Python + python-chess + Stockfish); serves the web UI
+docker-compose.yml  web app + Ollama, with auto model pull into a cached volume
 docker/entrypoint.sh  waits for Ollama and pulls the model on first run
 ```
 
@@ -148,8 +172,6 @@ python tests/test_logic.py        # or: python -m pytest tests/ -q
 
 ## Roadmap
 
-- Web UI (local server + board) once the coaching text is tuned — the CLI is
-  the proving ground first, by design.
 - Richer motif detection (pins, discovered attacks, outposts, pawn structure).
 - Opening-book / endgame-tablebase awareness so early and trivial positions
   aren't over-analysed.
