@@ -49,7 +49,33 @@ the refutation line, decisive swing), so the explanation is concrete.
 - A 7B model on CPU narrates in a few seconds — fine for turn-based study, not
   for real-time blitz.
 
-## Setup (Linux / macOS, incl. AMD Ryzen laptops — CPU is fine)
+## Quick start with Docker (recommended — nothing to install but Docker)
+
+This bundles the engine, the app, **and** Ollama, and **auto-downloads the LLM
+model** on first run into a cached volume. You don't install or pull anything
+by hand.
+
+```bash
+docker compose up -d --build          # start everything; model pulls automatically
+docker compose logs -f chesscoach     # watch the one-time model download, then Ctrl-C
+
+# then use any mode:
+docker compose exec chesscoach python coach_cli.py play --level 3
+docker compose exec chesscoach python coach_cli.py pgn game.pgn
+docker compose exec chesscoach python coach_cli.py move \
+  --fen "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2" --san Nf3
+```
+
+- First `up` downloads the model (a few GB for the default 7B). It's cached in
+  the `ollama-models` volume, so later runs start instantly.
+- CPU-only is fine (AMD Ryzen included) — no GPU required.
+- Want a smaller/faster model on a CPU laptop? Set it once:
+  `CHESSCOACH_MODEL=qwen2.5:3b-instruct docker compose up -d`
+- Stop everything: `docker compose down` (add `-v` to also delete the model cache).
+
+Prefer running it directly on your machine instead? Use the manual setup below.
+
+## Setup without Docker (Linux / macOS, incl. AMD Ryzen laptops — CPU is fine)
 
 ```bash
 # 1. Python deps
@@ -109,6 +135,9 @@ chesscoach/
   coach.py      wires the pipeline together
 coach_cli.py    CLI (move / pgn / play)
 tests/          engine-independent unit tests (run without Stockfish/Ollama)
+Dockerfile          app image (Python + python-chess + Stockfish)
+docker-compose.yml  app + Ollama, with auto model pull into a cached volume
+docker/entrypoint.sh  waits for Ollama and pulls the model on first run
 ```
 
 ## Running the tests
