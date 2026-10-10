@@ -108,19 +108,16 @@
   // ================= PLAY =================
   var P = { fen:START, orient:"white", human:"white", level:3, useLlm:true,
     moves:[], legal:[], sel:null, last:null, coaching:null, showRef:false, busy:false,
-    humanAccs:[], evalWhiteCp:0, saved:false, plan:null };
+    humanAccs:[], evalWhiteCp:0, saved:false, plan:null, arrows:[] };
   var el = function(id){ return document.getElementById(id); };
   var pboard=el("board"), parrows=el("arrows"), ppanel=el("panel"),
       pstatus=el("statusline"), pmoves=el("movegrid"), promo=el("promo"), refBtn=el("refBtn");
 
   function pTargets(from){ var o=[]; P.legal.forEach(function(u){ if(u.slice(0,2)===from)o.push(u.slice(2,4)); }); return o; }
   function renderPlay(){
-    var arrows = [];
-    if (P.coaching) arrows = coachArrows(P.coaching, P.showRef);
-    else if (P.plan && P.plan.bestFrom) arrows = [{from:P.plan.bestFrom,to:P.plan.bestTo,color:cvar("--accent"),dashed:true}];
     drawBoard(pboard, P.fen, P.orient, { sel:P.sel, last:P.last,
       targets: P.sel?pTargets(P.sel):null, onClick:onSquareClick });
-    drawArrows(parrows, P.orient, arrows);
+    drawArrows(parrows, P.orient, P.arrows || []);
     renderPanel(); renderMoves(); renderEval(); renderAcc();
   }
   function renderPanel(){
@@ -176,6 +173,7 @@
       var num=fullmove(P.fen), side=turnOf(P.fen);
       var c=await api("/api/move",{fen:P.fen,uci:uci,useLlm:P.useLlm});
       P.fen=c.fen; P.coaching=c; P.last={from:c.playedFrom,to:c.playedTo};
+      P.arrows=coachArrows(c,false);
       P.evalWhiteCp = side==="white"? c.evalCp : -c.evalCp;
       if (c.cpLoss!=null && c.evalCp!=null) P.humanAccs.push(moveAcc(c.cpLoss,c.evalCp));
       pushMove(side,c.san,uci,c.fen,num,c);
@@ -189,11 +187,18 @@
     setStatus((P.human==="white"?"Black":"White")+" is thinking…",false,true);
     var num=fullmove(P.fen), side=turnOf(P.fen);
     var r=await api("/api/engine",{fen:P.fen,level:P.level});
-    P.fen=r.fen; P.last={from:r.from,to:r.to};
+    P.fen=r.fen; P.last={from:r.from,to:r.to}; P.arrows=[];
     pushMove(side,r.san,r.from+r.to,r.fen,num,null);
     renderPlay();
     if (r.gameOver){ await endGame(r); return; }
-    await refreshLegal(); setStatus("Your move.");
+    await refreshLegal();
+    // Threat radar: warn if the opponent is now threatening something big.
+    try{
+      var t=await api("/api/threat",{fen:P.fen});
+      if (t.threat){ P.arrows=[{from:t.threat.from,to:t.threat.to,color:cvar("--blunder")}];
+        drawArrows(parrows,P.orient,P.arrows); setStatus("⚠ "+t.threat.text+" Your move."); return; }
+    }catch(e){}
+    setStatus("Your move.");
   }
   async function endGame(st){
     setStatus(st.status||"Game over.",true); P.legal=[];
@@ -246,7 +251,7 @@
   async function newGame(){
     if (P.busy) return; P.busy=true;
     P.fen=START; P.moves=[]; P.sel=null; P.last=null; P.coaching=null; P.showRef=false;
-    P.humanAccs=[]; P.evalWhiteCp=0; P.saved=false; P.plan=null;
+    P.humanAccs=[]; P.evalWhiteCp=0; P.saved=false; P.plan=null; P.arrows=[];
     P.human=el("colorSel").value; P.level=parseInt(el("levelSel").value,10); P.orient=P.human;
     renderPlay();
     setStatus("New game. "+(P.human==="white"?"Your move.":"Engine to move…"),false,P.human==="black");
@@ -255,7 +260,7 @@
     P.busy=false;
   }
   async function undo(){
-    if (P.busy || !P.moves.length) return; P.busy=true; P.showRef=false; P.sel=null; P.plan=null;
+    if (P.busy || !P.moves.length) return; P.busy=true; P.showRef=false; P.sel=null; P.plan=null; P.arrows=[];
     P.moves.pop(); if (P.moves.length && turnOf(P.moves[P.moves.length-1].fen)!==P.human) P.moves.pop();
     P.fen = P.moves.length? P.moves[P.moves.length-1].fen : START;
     P.last=null; P.coaching=lastHumanCoaching(); P.saved=false;
@@ -270,18 +275,21 @@
     setStatus("Finding the best move…",false,true);
     try{ var c=await api("/api/hint",{fen:P.fen,useLlm:P.useLlm});
       c.label="Best: "+c.bestSan; c.isBest=true; c.playedFrom=c.bestFrom; c.playedTo=c.bestTo; c.quality="best";
-      P.coaching=c; renderPlay(); setStatus("Hint shown — the green arrow is the engine's choice.");
+      P.coaching=c; P.arrows=coachArrows(c,false); renderPlay();
+      setStatus("Hint shown — the green arrow is the engine's choice.");
     }catch(e){ setStatus("Error: "+e.message,true); } P.busy=false;
   }
   async function plan(){
     if (P.busy) return; P.busy=true; P.showRef=false; P.coaching=null;
     setStatus("Thinking about the plan…",false,true);
     try{ var d=await api("/api/plan",{fen:P.fen,useLlm:P.useLlm});
-      P.plan=d; renderPlay(); setStatus("Here's the long-term plan for this position.");
+      P.plan=d; P.arrows = d.bestFrom?[{from:d.bestFrom,to:d.bestTo,color:cvar("--accent"),dashed:true}]:[];
+      renderPlay(); setStatus("Here's the long-term plan for this position.");
     }catch(e){ setStatus("Error: "+e.message,true); } P.busy=false;
   }
   function flip(){ P.orient=P.orient==="white"?"black":"white"; renderPlay(); }
-  function toggleRef(){ if(refBtn.disabled)return; P.showRef=!P.showRef; renderPlay(); }
+  function toggleRef(){ if(refBtn.disabled)return; P.showRef=!P.showRef;
+    P.arrows=coachArrows(P.coaching,P.showRef); renderPlay(); }
 
   // ================= DASHBOARD =================
   var D = { review:null, idx:0 };

@@ -145,6 +145,9 @@ def api_legal(body: dict) -> dict:
     return st
 
 
+_PIECE_NAMES = {chess.PAWN: "pawn", chess.KNIGHT: "knight", chess.BISHOP: "bishop",
+                chess.ROOK: "rook", chess.QUEEN: "queen"}
+
 TAG_PHRASES = {
     "hangs_piece": "left a piece hanging", "allows_mate": "allowed a forced mate",
     "refuted": "lost material to a tactic", "fork": "walked into a fork",
@@ -189,6 +192,43 @@ def api_hint(body: dict) -> dict:
         pre = get_analyzer().analyse_position(board, multipv=1)
     best = pre.best
     return coach_payload(board, best.move, bool(body.get("useLlm", True)))
+
+
+def api_threat(body: dict) -> dict:
+    """The opponent's biggest threat in the current position (null-move method).
+
+    If the side to move passed, what would the opponent do? If that free move
+    gains a lot, it is a real threat worth warning about.
+    """
+    board = chess.Board(body["fen"])
+    if board.is_game_over() or board.is_check():
+        return {"threat": None}
+    with _engine_lock:
+        az = get_analyzer()
+        now = az.analyse_position(board, multipv=1)
+        e_now = now.best.score_cp                      # side-to-move POV
+        board.push(chess.Move.null())
+        after = az.analyse_position(board, multipv=1)  # opponent to move = the threat
+        threat_move = after.best.move
+        threat_san = board.san(threat_move)
+        mate = after.best.mate_in
+        e_pass = -after.best.score_cp                  # back to our POV
+        target = board.piece_at(threat_move.to_square)
+        cap_name = _PIECE_NAMES.get(target.piece_type) if target else None
+        tfrom, tto = _sq(threat_move.from_square), _sq(threat_move.to_square)
+        board.pop()
+    threat_size = e_now - e_pass                        # how much we lose by passing
+    if (mate is not None and mate > 0) or threat_size >= 150:
+        if mate is not None and mate > 0:
+            text = f"They're threatening mate with {threat_san}."
+        elif cap_name and cap_name != "pawn":
+            text = f"They're threatening to win your {cap_name} with {threat_san}."
+        elif threat_size >= 900:
+            text = f"They're threatening {threat_san} — a decisive blow."
+        else:
+            text = f"They're threatening {threat_san}, worth about {threat_size / 100:.1f} pawns."
+        return {"threat": {"from": tfrom, "to": tto, "san": threat_san, "text": text}}
+    return {"threat": None}
 
 
 def api_plan(body: dict) -> dict:
@@ -422,6 +462,7 @@ ROUTES = {
     "/api/move": api_move,
     "/api/engine": api_engine,
     "/api/hint": api_hint,
+    "/api/threat": api_threat,
     "/api/plan": api_plan,
     "/api/save": api_save,
     "/api/games": api_games,
