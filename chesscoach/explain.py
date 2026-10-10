@@ -76,32 +76,41 @@ def template_explanation(f: CoachingFacts) -> str:
     tactical = f.motif_report.tactical
     positional = f.motif_report.positional
 
-    if v.is_best_move:
+    positive = v.quality in (Quality.BRILLIANT, Quality.BEST, Quality.EXCELLENT, Quality.GOOD)
+    if positive:
         reasons = [m.text for m in (tactical + positional)][:3]
         if reasons:
             parts.append("It works because " + _join(reasons) + ".")
-        else:
+        elif v.is_best_move:
             parts.append("It keeps the position at its best available evaluation.")
-    else:
-        if v.cp_loss >= 1000:
-            parts.append(
-                f"It throws away the game: the engine's choice {f.best_move_san} "
-                f"kept a decisive advantage, and this move surrenders it."
-            )
         else:
+            parts.append("A sound move that keeps your position healthy.")
+    else:
+        # Lead with the REASON, not the number. Tactical facts first (concrete),
+        # then the positional contrast (why the best move is better).
+        reasons = [m.text for m in tactical[:2]]
+        if len(reasons) < 2:
+            reasons += [m.text for m in positional if m.kind == "positional_contrast"][:2 - len(reasons)]
+
+        if v.cp_loss >= 1000:
+            lead = (f"It throws away the game — {f.best_move_san} kept a decisive "
+                    f"advantage and this move surrenders it")
+            parts.append((lead + (": " + _join(reasons) if reasons else "") + "."))
+        elif reasons:
+            parts.append("The problem: " + _join(reasons) + ".")
+        else:
+            # Truly diffuse positional slip — be honest rather than invent a reason.
             parts.append(
-                f"It costs about {v.cp_loss / 100:.1f} pawns compared with the "
-                f"engine's choice {f.best_move_san}."
+                f"It's a subtle positional slip: the engine prefers {f.best_move_san} "
+                f"for long-term reasons rather than anything you can point to in one move."
             )
-        if tactical:
-            parts.append("Concretely, " + _join(m.text for m in tactical[:2]) + ".")
-        if f.refutation_san:
-            parts.append("The engine's main line is: " + " ".join(f.refutation_san[:4]) + ".")
+
+        if f.refutation_san and tactical:
+            parts.append("The main line is: " + " ".join(f.refutation_san[:4]) + ".")
         if f.best_line_san:
-            parts.append(
-                f"Instead, {f.best_move_san} was better: "
-                + " ".join(f.best_line_san[:4]) + "."
-            )
+            parts.append(f"{f.best_move_san} was better: " + " ".join(f.best_line_san[:4]) + ".")
+        if v.cp_loss < 1000:          # the pawn figure is meaningless at mate scale
+            parts.append(f"(about {v.cp_loss / 100:.1f} pawns worse.)")
         if v.swung_the_game:
             parts.append("This is the move that changed who is winning.")
 

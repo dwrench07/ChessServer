@@ -76,6 +76,21 @@ def test_hanging_piece_motif():
     assert report.tactical  # at least one concrete fact
 
 
+def test_positional_contrast_explains_quiet_inaccuracy():
+    # After 1.e4 e5 2.Nf3 Nc6 3.Bc4, a slow move (a6) vs developing (Nf6):
+    # the contrast should produce a positional reason, tagged non-tactical.
+    from chesscoach.positional import contrast
+    board = chess.Board("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3")
+    played = board.parse_san("a6")
+    best = board.parse_san("Nf6")
+    motifs = contrast(board, played, best)
+    assert motifs, "expected at least one positional reason"
+    assert all(not m.tactical for m in motifs)
+    assert all(m.kind == "positional_contrast" for m in motifs)
+    # identical moves -> no contrast
+    assert contrast(board, best, best) == []
+
+
 def test_template_never_empty():
     board = chess.Board("4k3/8/8/8/8/8/3Q4/4K3 w - - 0 1")
     move = chess.Move.from_uci("d2d7")

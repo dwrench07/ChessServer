@@ -66,8 +66,18 @@ def coach_move(
         played_eval,
         is_sacrifice=_is_sacrifice(board_before, move),
     )
-    good = verdict.quality in (Quality.BRILLIANT, Quality.BEST, Quality.EXCELLENT)
-    motifs: MotifReport = build_motifs(board_before, move, played_eval, is_good=good)
+    subpar = verdict.quality in (Quality.INACCURACY, Quality.MISTAKE, Quality.BLUNDER)
+    motifs: MotifReport = build_motifs(board_before, move, played_eval, is_good=not subpar)
+
+    # For a sub-par move, add the positional "why" (what the best move does that
+    # this one doesn't). This is what turns "inaccuracy, -0.3" into intuition.
+    if subpar and move != pre.best.move:
+        from .positional import contrast
+        contrast_motifs = contrast(board_before, move, pre.best.move)
+        if contrast_motifs:
+            tact = [m for m in motifs.motifs if m.tactical]
+            pos = [m for m in motifs.motifs if not m.tactical]
+            motifs.motifs = tact + contrast_motifs + pos
 
     mover = "White" if board_before.turn == chess.WHITE else "Black"
     facts = CoachingFacts(
