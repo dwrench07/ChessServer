@@ -229,3 +229,40 @@ svg.trend{width:100%;height:90px;display:block}
 .grow .sub{color:var(--muted);font-size:.72rem;font-family:var(--font-mono)}
 .grow .accbadge{font-family:var(--font-mono);font-size:.78rem;padding:2px 7px;border-radius:999px;
   border:1px solid var(--line);font-variant-numeric:tabular-nums}
+
+/* ================= progression ================= */
+.progresswrap{display:grid;grid-template-columns:minmax(280px,1fr) minmax(320px,1.4fr);gap:18px;align-items:start}
+@media(max-width:820px){.progresswrap{grid-template-columns:1fr}}
+.levelcard .levelhead{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px}
+.levelcard .levelno{font-family:var(--font-display);font-size:1.7rem;font-weight:600}
+.levelcard .leveltot{color:var(--muted);font-family:var(--font-mono);font-size:.82rem}
+.xpbar{height:14px;border-radius:999px;background:var(--bg);border:1px solid var(--line);overflow:hidden}
+.xpfill{height:100%;background:linear-gradient(90deg,var(--accent),var(--brilliant));transition:width .6s cubic-bezier(.2,.8,.2,1)}
+.xpnext{margin-top:7px;color:var(--muted);font-family:var(--font-mono);font-size:.78rem}
+.lifestats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:16px}
+.lifestats div{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 6px;text-align:center}
+.lifestats b{display:block;font-family:var(--font-mono);font-size:1.25rem;font-weight:700}
+.lifestats span{color:var(--muted);font-size:.68rem;text-transform:uppercase;letter-spacing:.04em}
+.kingdomintro{color:var(--muted);font-size:.84rem;line-height:1.5;margin:4px 0 14px}
+.kingdomgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px}
+.kcard{display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 6px;border-radius:10px;
+  border:1px solid var(--line);background:var(--bg);opacity:.42;filter:grayscale(1);transition:all .3s}
+.kcard.on{opacity:1;filter:none;border-color:var(--accent);box-shadow:var(--shadow)}
+.kcard .kicon{font-size:1.9rem;line-height:1}
+.kcard .kname{font-size:.76rem;font-weight:600;text-align:center}
+.kcard .klock{font-size:.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+
+/* grade pop-up at game end */
+.gradepop{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(.7);
+  z-index:60;text-align:center;padding:28px 44px;border-radius:18px;background:var(--surface);
+  border:1px solid var(--line);box-shadow:0 12px 48px rgba(0,0,0,.28);opacity:0;pointer-events:none;
+  transition:opacity .35s,transform .35s cubic-bezier(.2,.9,.3,1.3)}
+.gradepop.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
+.gradepop .gradebig{font-family:var(--font-display);font-size:4rem;font-weight:600;line-height:1}
+.gradepop .gradesub{margin-top:6px;color:var(--muted);font-family:var(--font-mono);font-size:.9rem}
+.gradepop.grade-a .gradebig{color:var(--best)}
+.gradepop.grade-b .gradebig{color:var(--good)}
+.gradepop.grade-c .gradebig{color:var(--inaccuracy)}
+.gradepop.grade-d .gradebig{color:var(--mistake)}
+.gradepop.grade-e .gradebig{color:var(--blunder)}
+@media(prefers-reduced-motion:reduce){.gradepop,.xpfill{transition:opacity .2s}}

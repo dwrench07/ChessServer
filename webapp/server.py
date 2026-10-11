@@ -34,6 +34,7 @@ from chesscoach.explain import (CoachingFacts, explain, ollama_available,
                                 OLLAMA_MODEL, strategic_explanation)
 from chesscoach.motifs import build_motifs
 from chesscoach.plot import find_plot
+from chesscoach import progress
 from chesscoach.strategy import strategic_brief, plan_from_line, phase as game_phase
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
@@ -309,18 +310,60 @@ def api_save(body: dict) -> dict:
             "quality": m.get("quality"), "cp_loss": m.get("cpLoss"),
             "eval_cp": m.get("evalCp"), "tag": m.get("tag"),
         })
+    wa, ba = game_accuracy(white_accs), game_accuracy(black_accs)
+    hc = body.get("humanColor")
+    result = body.get("result", "*")
     gid = store.save_game({
         "source": "play",
-        "white": body.get("white", "You" if body.get("humanColor") == "white" else "Stockfish"),
-        "black": body.get("black", "You" if body.get("humanColor") == "black" else "Stockfish"),
-        "result": body.get("result", "*"),
-        "human_color": body.get("humanColor"),
+        "white": body.get("white", "You" if hc == "white" else "Stockfish"),
+        "black": body.get("black", "You" if hc == "black" else "Stockfish"),
+        "result": result,
+        "human_color": hc,
         "level": body.get("level"),
-        "white_acc": game_accuracy(white_accs),
-        "black_acc": game_accuracy(black_accs),
+        "white_acc": wa,
+        "black_acc": ba,
         "pgn": body.get("pgn"),
     }, records)
-    return {"id": gid, "whiteAcc": game_accuracy(white_accs), "blackAcc": game_accuracy(black_accs)}
+
+    out = {"id": gid, "whiteAcc": wa, "blackAcc": ba}
+
+    # Progression: only finished played games with a known human side earn XP.
+    human_acc = wa if hc == "white" else (ba if hc == "black" else None)
+    if hc and result in ("1-0", "0-1", "1/2-1/2"):
+        won = (result == "1-0") == (hc == "white")
+        drew = result == "1/2-1/2"
+        streak = int(body.get("streak", 0) or 0)
+        earned = progress.xp_for(won, drew, human_acc)
+        prof = store.add_result(earned, won, human_acc, streak)
+        prog = progress.level_progress(prof["total_xp"])
+        out["progress"] = {
+            "earned": earned,
+            "grade": progress.grade(human_acc),
+            "accuracy": human_acc,
+            "result": "win" if won else ("draw" if drew else "loss"),
+            **prog,
+        }
+    return out
+
+
+def api_profile(_body: dict) -> dict:
+    """The learner's running progression: XP, level, kingdom, lifetime stats."""
+    prof = store.get_profile()
+    prog = progress.level_progress(prof["total_xp"])
+    return {
+        "level": prog["level"],
+        "xp": prog["xp"],
+        "levelFloor": prog["levelFloor"],
+        "nextAt": prog["nextAt"],
+        "pct": prog["pct"],
+        "kingdom": progress.kingdom_for_level(prog["level"]),
+        "stats": {
+            "games": prof["games"],
+            "wins": prof["wins"],
+            "bestAcc": round(prof["best_acc"], 1),
+            "bestStreak": prof["best_streak"],
+        },
+    }
 
 
 def api_games(body: dict) -> dict:
@@ -515,6 +558,7 @@ ROUTES = {
     "/api/plan": api_plan,
     "/api/concepts": api_concepts,
     "/api/save": api_save,
+    "/api/profile": api_profile,
     "/api/games": api_games,
     "/api/game": api_game,
     "/api/dashboard": api_dashboard,

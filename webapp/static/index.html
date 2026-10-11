@@ -16,6 +16,7 @@
       <nav class="nav">
         <button class="navbtn" data-view="play" aria-current="true">Play</button>
         <button class="navbtn" data-view="dash">Dashboard</button>
+        <button class="navbtn" data-view="progress">Progress</button>
         <button class="navbtn" data-view="concepts">Concepts</button>
       </nav>
       <span class="health" id="health" title="engine / model status"></span>
@@ -150,6 +151,22 @@
             <div class="gamelist" id="gameList"></div>
           </div>
         </aside>
+      </div>
+    </section>
+
+    <!-- ============ PROGRESS VIEW ============ -->
+    <section data-view="progress" hidden>
+      <div class="progresswrap">
+        <div class="panel levelcard" id="levelCard">
+          <p class="empty">Loading your journey…</p>
+        </div>
+        <div class="panel kingdompanel">
+          <h2>Your kingdom</h2>
+          <p class="kingdomintro">Every finished game earns XP. As you level up, your realm
+            grows from a lone camp to a dynasty. A well-played loss still builds more than a
+            sloppy win — chess rewards understanding, not just results.</p>
+          <div class="kingdomgrid" id="kingdomGrid"></div>
+        </div>
       </div>
     </section>
 

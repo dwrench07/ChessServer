@@ -45,6 +45,14 @@ CREATE TABLE IF NOT EXISTS moves (
   tag       TEXT                       -- primary mistake motif, e.g. 'hangs_piece'
 );
 CREATE INDEX IF NOT EXISTS idx_moves_game ON moves(game_id);
+CREATE TABLE IF NOT EXISTS profile (
+  id          INTEGER PRIMARY KEY CHECK (id = 1),
+  total_xp    REAL NOT NULL DEFAULT 0,
+  games       INTEGER NOT NULL DEFAULT 0,
+  wins        INTEGER NOT NULL DEFAULT 0,
+  best_acc    REAL NOT NULL DEFAULT 0,
+  best_streak INTEGER NOT NULL DEFAULT 0
+);
 """
 
 
@@ -137,6 +145,25 @@ def delete_game(game_id: int) -> None:
     with _conn() as conn:
         conn.execute("DELETE FROM moves WHERE game_id=?", (game_id,))
         conn.execute("DELETE FROM games WHERE id=?", (game_id,))
+
+
+def get_profile() -> dict:
+    with _conn() as conn:
+        conn.execute("INSERT OR IGNORE INTO profile(id) VALUES (1)")
+        return dict(conn.execute("SELECT * FROM profile WHERE id = 1").fetchone())
+
+
+def add_result(xp: float, won: bool, accuracy: float | None, streak: int = 0) -> dict:
+    """Record a finished game into the running profile; returns the new profile."""
+    with _conn() as conn:
+        conn.execute("INSERT OR IGNORE INTO profile(id) VALUES (1)")
+        conn.execute(
+            """UPDATE profile SET total_xp = total_xp + ?, games = games + 1,
+                   wins = wins + ?, best_acc = MAX(best_acc, ?), best_streak = MAX(best_streak, ?)
+               WHERE id = 1""",
+            (xp, 1 if won else 0, accuracy or 0, streak),
+        )
+        return dict(conn.execute("SELECT * FROM profile WHERE id = 1").fetchone())
 
 
 def tag_stats(tag: str) -> dict:

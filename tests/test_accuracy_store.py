@@ -15,7 +15,7 @@ _TMP = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
 _TMP.close()
 os.environ["CHESSCOACH_DB"] = _TMP.name
 
-from chesscoach import store                       # noqa: E402
+from chesscoach import store, progress              # noqa: E402
 from chesscoach.accuracy import (                   # noqa: E402
     win_percent, accuracy_from_cp, game_accuracy, move_accuracy,
 )
@@ -78,6 +78,49 @@ def test_store_roundtrip_and_dashboard():
     # the human (white) blunder tagged as a hanging piece should be counted
     assert dash["mistakeTags"].get("hangs_piece", 0) >= 1
     assert dash["qualityCounts"].get("blunder", 0) >= 1
+
+
+def test_progress_xp_rewards_result_and_quality():
+    # A won game pays more than a drawn one, which pays more than a loss,
+    # at equal accuracy.
+    assert progress.xp_for(True, False, 80) > progress.xp_for(False, True, 80) \
+        > progress.xp_for(False, False, 80)
+    # A well-played loss can out-earn a sloppy win's accuracy component, but the
+    # result bonus still dominates; at least a clean loss beats a scrappy loss.
+    assert progress.xp_for(False, False, 95) > progress.xp_for(False, False, 20)
+    # Accuracy is optional (unanalysed import).
+    assert progress.xp_for(True, False, None) > 0
+
+
+def test_progress_levels_and_grade():
+    assert progress.level_for_xp(0) == 1
+    assert progress.level_for_xp(100) == 2
+    assert progress.level_for_xp(10_000) == len(progress._THRESHOLDS)
+    lp = progress.level_progress(150)
+    assert lp["level"] == 2 and 0 <= lp["pct"] <= 100
+    assert lp["nextAt"] == progress._THRESHOLDS[2]
+    # top level: no next threshold, bar full
+    top = progress.level_progress(1_000_000)
+    assert top["nextAt"] is None and top["pct"] == 100
+    assert progress.grade(96) == "A+" and progress.grade(55) == "E"
+    assert progress.grade(None) == "—"
+
+
+def test_progress_kingdom_unlocks_cumulatively():
+    k = progress.kingdom_for_level(3)
+    assert k[0]["unlocked"] and k[2]["unlocked"] and not k[3]["unlocked"]
+    assert len(k) == len(progress._KINGDOM)
+
+
+def test_store_profile_accumulates():
+    before = store.get_profile()
+    p = store.add_result(50, won=True, accuracy=88.0, streak=4)
+    assert p["total_xp"] == before["total_xp"] + 50
+    assert p["games"] == before["games"] + 1
+    assert p["wins"] == before["wins"] + 1
+    # best_acc/best_streak are high-water marks, never regress
+    p2 = store.add_result(10, won=False, accuracy=40.0, streak=1)
+    assert p2["best_acc"] == p["best_acc"] and p2["best_streak"] == p["best_streak"]
 
 
 if __name__ == "__main__":

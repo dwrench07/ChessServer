@@ -310,12 +310,17 @@
   async function saveGame(status){
     try{
       var payload={ humanColor:P.human, level:P.level, result:resultFrom(status), pgn:buildPgn(),
+        streak:P.streak||0,
         moves:P.moves.map(function(m,i){ return { ply:i+1, side:m.side, san:m.san, uci:m.uci,
           quality:m.coaching?m.coaching.quality:null, cpLoss:m.coaching?m.coaching.cpLoss:null,
           evalCp:m.coaching?m.coaching.evalCp:null, tag:m.coaching?m.coaching.tag:null }; }) };
       var r=await api("/api/save",payload);
       var acc = P.human==="white"? r.whiteAcc : r.blackAcc;
-      setStatus((status||"Game over.")+"  — saved to Dashboard"+(acc!=null?" ("+acc+"% accuracy)":"")+".", true);
+      var pr = r.progress;
+      var msg = (status||"Game over.")+"  — saved to Dashboard"+(acc!=null?" ("+acc+"% accuracy)":"")+".";
+      if (pr){ msg += "  Grade "+pr.grade+", +"+pr.earned+" XP (level "+pr.level+")."; }
+      setStatus(msg, true);
+      if (pr){ showGrade(pr); }
     }catch(e){ /* saving is best-effort */ }
   }
 
@@ -550,6 +555,46 @@
     document.querySelectorAll(".navbtn").forEach(function(b){ b.setAttribute("aria-current", b.dataset.view===v?"true":"false"); });
     document.querySelectorAll("section[data-view]").forEach(function(s){ s.hidden = s.dataset.view!==v; });
     if (v==="dash"){ loadDash(); }
+    if (v==="progress"){ loadProgress(); }
+  }
+
+  // ================= progression =================
+  function kingdomCards(kingdom){
+    return (kingdom||[]).map(function(k){
+      return '<div class="kcard'+(k.unlocked?" on":"")+'">'+
+        '<span class="kicon">'+k.icon+'</span>'+
+        '<span class="kname">'+esc(k.name)+'</span>'+
+        (k.unlocked?'':'<span class="klock">locked</span>')+'</div>';
+    }).join("");
+  }
+  function renderProgress(p){
+    var bar = p.nextAt==null
+      ? '<div class="xpnext">Max level reached — '+p.xp+' XP</div>'
+      : '<div class="xpbar"><div class="xpfill" style="width:'+p.pct+'%"></div></div>'+
+        '<div class="xpnext">'+p.xp+' / '+p.nextAt+' XP to level '+(p.level+1)+'</div>';
+    el("levelCard").innerHTML =
+      '<div class="levelhead"><span class="levelno">Level '+p.level+'</span>'+
+      '<span class="leveltot">'+p.xp+' XP total</span></div>'+ bar +
+      '<div class="lifestats">'+
+        '<div><b>'+p.stats.games+'</b><span>games</span></div>'+
+        '<div><b>'+p.stats.wins+'</b><span>wins</span></div>'+
+        '<div><b>'+(p.stats.bestAcc||0)+'%</b><span>best accuracy</span></div>'+
+        '<div><b>'+p.stats.bestStreak+'</b><span>best streak</span></div>'+
+      '</div>';
+    el("kingdomGrid").innerHTML = kingdomCards(p.kingdom);
+  }
+  async function loadProgress(){
+    try{ var p=await api("/api/profile",{}); renderProgress(p); }
+    catch(e){ el("levelCard").innerHTML='<p class="empty">Could not load progress.</p>'; }
+  }
+  function showGrade(pr){
+    var g=document.createElement("div"); g.className="gradepop grade-"+(pr.grade[0]||"E").toLowerCase();
+    g.innerHTML='<div class="gradebig">'+pr.grade+'</div>'+
+      '<div class="gradesub">+'+pr.earned+' XP · level '+pr.level+'</div>';
+    document.body.appendChild(g);
+    requestAnimationFrame(function(){ g.classList.add("show"); });
+    setTimeout(function(){ g.classList.remove("show");
+      setTimeout(function(){ g.remove(); },400); }, 2600);
   }
   async function loadHealth(){
     try{ var h=await api("/api/health",{});
