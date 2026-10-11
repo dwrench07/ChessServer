@@ -105,6 +105,42 @@ def test_strategy_phase_and_brief():
     assert isinstance(br.character, str) and br.character
 
 
+def test_plot_detects_seed_and_strike():
+    from chesscoach.plot import find_plot
+
+    def ply(p, side, num, san, frm, to, cp):
+        return {"ply": p, "side": side, "moveNumber": num, "san": san,
+                "playedFrom": frm, "playedTo": to, "evalCp": cp, "fenBefore": None,
+                "quality": "best"}
+
+    # White quietly lifts a rook to d1 (ply 3), then mates with it on d8 (ply 13).
+    review = [
+        ply(1, "white", 1, "e4", "e2", "e4", 20),
+        ply(2, "black", 1, "e5", "e7", "e5", -20),
+        ply(3, "white", 2, "Rd1", "a1", "d1", 30),      # the seed (quiet)
+        ply(4, "black", 2, "Nc6", "b8", "c6", -30),
+        ply(5, "white", 3, "h3", "h2", "h3", 35),
+        ply(6, "black", 3, "a6", "a7", "a6", -35),
+        ply(7, "white", 4, "c3", "c2", "c3", 40),
+        ply(8, "black", 4, "b6", "b7", "b6", -40),
+        ply(9, "white", 5, "g3", "g2", "g3", 45),
+        ply(10, "black", 5, "h6", "h7", "h6", -45),
+        ply(11, "white", 6, "Kg2", "g1", "g2", 50),
+        ply(12, "black", 6, "Qe7", "d8", "e7", -50),
+        ply(13, "white", 7, "Rd8#", "d1", "d8", 100000),  # the strike (mate)
+    ]
+    p = find_plot(review)
+    assert p["hasPlot"] is True
+    assert p["winner"] == "White"
+    assert p["seed"]["san"] == "Rd1"
+    assert p["strike"]["san"] == "Rd8#"
+
+    # A balanced game has no plot, honestly.
+    flat = [ply(i + 1, "white" if i % 2 == 0 else "black", i // 2 + 1,
+                "Nf3", "g1", "f3", 10 if i % 2 == 0 else -10) for i in range(12)]
+    assert find_plot(flat)["hasPlot"] is False
+
+
 def test_analogies_mapping():
     from chesscoach import analogies
     assert analogies.concept_for_tag("hangs_piece") == "hanging_piece"

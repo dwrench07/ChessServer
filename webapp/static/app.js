@@ -319,8 +319,33 @@
     var ss=el("stratSummary");
     if (data.strategicSummary && data.strategicSummary.text){ ss.hidden=false; ss.textContent=data.strategicSummary.text; }
     else ss.hidden=true;
+    renderPlot(data.plot);
     renderReview();
     el("reviewCard").scrollIntoView({behavior:"smooth",block:"nearest"});
+  }
+  function jumpToPly(ply){
+    if (!D.review) return;
+    for (var i=0;i<D.review.length;i++){ if (D.review[i].ply===ply){ D.idx=i; renderReview(); return; } }
+  }
+  function renderPlot(plot){
+    var card=el("plotCard");
+    if (!plot || !plot.hasPlot){
+      if (plot && plot.reason){ card.hidden=false;
+        card.innerHTML='<h3>🎭 The Plot</h3><p class="plotnone">No slow-burning plot here — '+esc(plot.reason)+'</p>'; }
+      else card.hidden=true;
+      return;
+    }
+    card.hidden=false;
+    var acts='<div class="plotacts">'+
+      plotAct("Act 1 · Seed", plot.seed)+
+      (plot.buildup&&plot.buildup.length?plotAct("Act 2 · Build", plot.buildup[0], plot.buildup.length>1?('+'+(plot.buildup.length-1)+' more'):""):"")+
+      plotAct("Act 3 · Strike", plot.strike)+'</div>';
+    card.innerHTML='<h3>🎭 The Plot</h3><p class="ptext">'+esc(plot.text)+'</p>'+acts;
+    [].forEach.call(card.querySelectorAll('.pact'),function(b){ b.addEventListener('click',function(){ jumpToPly(+b.dataset.ply); }); });
+  }
+  function plotAct(label,node,extra){
+    return '<button class="pact" data-ply="'+node.ply+'"><span class="k">'+label+'</span>'+
+      '<span class="m">'+node.moveNumber+'. '+esc(node.san)+'</span>'+(extra?' <span class="k">'+esc(extra)+'</span>':'')+'</button>';
   }
   function renderReview(){
     if (!D.review || !D.review.length) return;

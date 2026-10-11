@@ -33,6 +33,7 @@ from chesscoach.engine import Analyzer, find_stockfish
 from chesscoach.explain import (CoachingFacts, explain, ollama_available,
                                 OLLAMA_MODEL, strategic_explanation)
 from chesscoach.motifs import build_motifs
+from chesscoach.plot import find_plot
 from chesscoach.strategy import strategic_brief, plan_from_line, phase as game_phase
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
@@ -317,7 +318,7 @@ def api_review(body: dict) -> dict:
     h, review, _records, wa, ba, summary = _analyze_pgn(g["pgn"])
     return {"id": g["id"], "white": g["white"], "black": g["black"],
             "result": g["result"], "whiteAcc": wa, "blackAcc": ba,
-            "review": review, "strategicSummary": summary}
+            "review": review, "strategicSummary": summary, "plot": find_plot(review)}
 
 
 def api_delete(body: dict) -> dict:
@@ -408,7 +409,7 @@ def _review_pgn(pgn_text: str, source: str, movetime: float = 0.18,
     }, records)
     return {"id": gid, "white": h.get("White", "?"), "black": h.get("Black", "?"),
             "result": h.get("Result", "*"), "whiteAcc": wa, "blackAcc": ba,
-            "review": review, "strategicSummary": summary}
+            "review": review, "strategicSummary": summary, "plot": find_plot(review)}
 
 
 def coach_payload_fast(board: chess.Board, move: chess.Move, movetime: float) -> dict:

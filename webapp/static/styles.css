@@ -160,6 +160,18 @@ button.ctl[aria-pressed="true"]{background:var(--accent);color:#fff;border-color
 .dcontrols{display:flex;gap:6px}
 .stratsummary{background:var(--bg);border:1px solid var(--line);border-left:3px solid var(--accent);
   border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:.86rem;color:var(--fg)}
+.plotcard{background:linear-gradient(180deg,color-mix(in srgb,var(--brilliant) 10%,var(--surface)),var(--surface));
+  border:1px solid var(--brilliant);border-radius:10px;padding:14px;margin-bottom:12px}
+.plotcard h3{font-family:var(--font-display);font-weight:600;font-size:1.05rem;margin:0 0 6px;
+  display:flex;align-items:center;gap:8px}
+.plotcard .ptext{font-size:.88rem;margin:0 0 12px}
+.plotacts{display:flex;gap:8px;flex-wrap:wrap}
+.pact{flex:1;min-width:120px;text-align:left;background:var(--surface);border:1px solid var(--line);
+  border-radius:8px;padding:8px 10px;cursor:pointer;font-size:.8rem}
+.pact:hover{border-color:var(--brilliant)}
+.pact .k{font-size:.64rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);display:block}
+.pact .m{font-family:var(--font-mono);font-weight:600;font-size:.92rem}
+.plotnone{font-size:.84rem;color:var(--muted);font-style:italic}
 .planlist{margin-top:12px;display:grid;gap:6px;font-size:.86rem}
 .planlist .pl{display:flex;gap:8px}
 .planlist .pl b{color:var(--muted);font-weight:600;font-size:.72rem;text-transform:uppercase;
