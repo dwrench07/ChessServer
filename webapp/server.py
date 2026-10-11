@@ -144,6 +144,17 @@ def api_legal(body: dict) -> dict:
     board = chess.Board(body["fen"])
     st = _game_state(board)
     st["ucis"] = [mv.uci() for mv in board.legal_moves]
+    # Real-time glow: your loose pieces vs the opponent pieces you can win.
+    from chesscoach.motifs import static_exchange_eval
+    mover = board.turn
+    hanging, targets = [], []
+    for sq, piece in board.piece_map().items():
+        if piece.piece_type == chess.KING:
+            continue
+        if static_exchange_eval(board, sq) > 0:
+            (hanging if piece.color == mover else targets).append(_sq(sq))
+    st["hanging"] = hanging
+    st["targets"] = targets
     return st
 
 

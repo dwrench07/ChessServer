@@ -47,6 +47,8 @@
       cell.style.background = light ? cvar("--sq-light") : cvar("--sq-dark");
       if (opts.last && (opts.last.from===name || opts.last.to===name)) cell.classList.add("lastmove");
       if (opts.sel === name) cell.classList.add("sel");
+      if (opts.warnGlow && opts.warnGlow.indexOf(name)>=0) cell.classList.add("glow-warn");
+      if (opts.goodGlow && opts.goodGlow.indexOf(name)>=0) cell.classList.add("glow-good");
       var p = grid[br][bc];
       if (p){ var span=document.createElement("span"); span.className="pc "+(p===p.toUpperCase()?"w":"b");
         span.textContent=GLYPH[p.toLowerCase()]; cell.appendChild(span); }
@@ -108,7 +110,8 @@
   // ================= PLAY =================
   var P = { fen:START, orient:"white", human:"white", level:3, useLlm:true,
     moves:[], legal:[], sel:null, last:null, coaching:null, showRef:false, busy:false,
-    humanAccs:[], evalWhiteCp:0, saved:false, plan:null, arrows:[], analogy:false };
+    humanAccs:[], evalWhiteCp:0, saved:false, plan:null, arrows:[], analogy:false,
+    showGlow:true, hanging:[], targets:[], streak:0, prevYourWin:50 };
   var el = function(id){ return document.getElementById(id); };
   var pboard=el("board"), parrows=el("arrows"), ppanel=el("panel"),
       pstatus=el("statusline"), pmoves=el("movegrid"), promo=el("promo"), refBtn=el("refBtn");
@@ -116,9 +119,58 @@
   function pTargets(from){ var o=[]; P.legal.forEach(function(u){ if(u.slice(0,2)===from)o.push(u.slice(2,4)); }); return o; }
   function renderPlay(){
     drawBoard(pboard, P.fen, P.orient, { sel:P.sel, last:P.last,
-      targets: P.sel?pTargets(P.sel):null, onClick:onSquareClick });
+      targets: P.sel?pTargets(P.sel):null, onClick:onSquareClick,
+      warnGlow: P.showGlow?P.hanging:[], goodGlow: P.showGlow?P.targets:[] });
     drawArrows(parrows, P.orient, P.arrows || []);
-    renderPanel(); renderMoves(); renderEval(); renderAcc();
+    renderPanel(); renderMoves(); renderEval(); renderAcc(); renderWin();
+  }
+
+  // ---- real-time juice ----
+  function reduceMotion(){ try{ return matchMedia("(prefers-reduced-motion:reduce)").matches; }catch(e){ return false; } }
+  var fx=el("fx"), fxCtx=null, parts=[], rafId=null;
+  function fxResize(){ var w=el("boardWrap").clientWidth||440; if(fx.width!==w){ fx.width=w; fx.height=w; } }
+  function burst(cx,cy,colors,n){
+    if (reduceMotion()) return; fxResize();
+    for(var i=0;i<n;i++){ var a=Math.random()*6.283, sp=1+Math.random()*3.2;
+      parts.push({x:cx,y:cy,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-1.4,life:1,
+        color:colors[i%colors.length],r:2+Math.random()*2.5}); }
+    if(!rafId) rafId=requestAnimationFrame(fxTick);
+  }
+  function fxTick(){
+    fxCtx=fxCtx||fx.getContext("2d"); fxCtx.clearRect(0,0,fx.width,fx.height);
+    parts=parts.filter(function(p){ return p.life>0; });
+    parts.forEach(function(p){ p.x+=p.vx; p.y+=p.vy; p.vy+=0.14; p.life-=0.024;
+      fxCtx.globalAlpha=Math.max(0,p.life); fxCtx.fillStyle=p.color;
+      fxCtx.beginPath(); fxCtx.arc(p.x,p.y,p.r,0,6.283); fxCtx.fill(); });
+    fxCtx.globalAlpha=1;
+    if(parts.length) rafId=requestAnimationFrame(fxTick);
+    else { rafId=null; fxCtx.clearRect(0,0,fx.width,fx.height); }
+  }
+  function sqPixel(sq){ var pt=sqToXY(sq,P.orient); var w=fx.width||440; return {x:pt.x/80*w,y:pt.y/80*w}; }
+  function captureFx(toSq){
+    var cell=pboard.querySelector('[data-sq="'+toSq+'"]');
+    if(cell && !reduceMotion()){ cell.classList.add("capflash"); setTimeout(function(){ cell.classList.remove("capflash"); },460); }
+    fxResize(); var px=sqPixel(toSq); burst(px.x,px.y,[cvar("--brilliant"),cvar("--mistake"),cvar("--best")],14);
+  }
+  function confetti(){ fxResize(); burst(fx.width/2, fx.height*0.3,
+    [cvar("--brilliant"),cvar("--best"),cvar("--good"),cvar("--inaccuracy")], 42); }
+  function momentum(delta){
+    if(reduceMotion() || Math.abs(delta)<2) return;
+    var m=el("momentum"); m.hidden=false; m.className="momentum "+(delta>0?"up":"down");
+    m.textContent=(delta>0?"+":"")+Math.round(delta)+"%";
+    m.style.animation="none"; void m.offsetWidth; m.style.animation="";
+    clearTimeout(m._t); m._t=setTimeout(function(){ m.hidden=true; },1300);
+  }
+  function renderWin(){
+    var w=el("winpct");
+    if(!P.moves.length && !P.coaching){ w.hidden=true; return; }
+    var yc = P.human==="white" ? P.evalWhiteCp : -P.evalWhiteCp;
+    var you = Math.max(1, Math.min(99, winPercent(yc)));
+    w.hidden=false;
+    w.innerHTML='<span class="wyou">You '+you.toFixed(0)+'%</span>'+
+      '<span class="wbar"><span class="wfill" style="width:'+you.toFixed(0)+'%"></span></span>'+
+      '<span>Engine '+(100-you).toFixed(0)+'%</span>'+
+      (P.streak>=3?' <span class="streak">🔥 '+P.streak+' in a row</span>':'');
   }
   function renderPanel(){
     if (P.plan){ ppanel.innerHTML = planHTML(P.plan) + analogyHTML(P.plan.conceptKey); refBtn.disabled=true; return; }
@@ -179,7 +231,8 @@
   function setStatus(t,alert,spin){ pstatus.className="statusline"+(alert?" alert":"");
     pstatus.innerHTML=(spin?'<span class="spin"></span> ':"")+esc(t); }
 
-  async function refreshLegal(){ var st=await api("/api/legal",{fen:P.fen}); P.legal=st.ucis||[]; return st; }
+  async function refreshLegal(){ var st=await api("/api/legal",{fen:P.fen});
+    P.legal=st.ucis||[]; P.hanging=st.hanging||[]; P.targets=st.targets||[]; return st; }
   function pushMove(side,san,uci,fen,num,coaching){ P.moves.push({side:side,san:san,uci:uci,fen:fen,num:num,coaching:coaching}); }
   function fullmove(fen){ return parseInt(fen.split(" ")[5],10)||1; }
 
@@ -193,6 +246,12 @@
       P.arrows=coachArrows(c,false);
       P.evalWhiteCp = side==="white"? c.evalCp : -c.evalCp;
       if (c.cpLoss!=null && c.evalCp!=null) P.humanAccs.push(moveAcc(c.cpLoss,c.evalCp));
+      // juice: momentum swing, streak, confetti, capture burst
+      var yourWin = winPercent(c.evalCp);          // c.evalCp is from your POV
+      momentum(yourWin - P.prevYourWin); P.prevYourWin = yourWin;
+      P.streak = (["best","excellent","good","brilliant"].indexOf(c.quality)>=0) ? P.streak+1 : 0;
+      if (c.quality==="brilliant") confetti();
+      if (c.san.indexOf("x")>=0) captureFx(c.playedTo);
       pushMove(side,c.san,uci,c.fen,num,c);
       renderPlay();
       if (c.gameOver){ await endGame(c); P.busy=false; return; }
@@ -207,6 +266,7 @@
     P.fen=r.fen; P.last={from:r.from,to:r.to}; P.arrows=[];
     pushMove(side,r.san,r.from+r.to,r.fen,num,null);
     renderPlay();
+    if (r.san.indexOf("x")>=0) captureFx(r.to);
     if (r.gameOver){ await endGame(r); return; }
     await refreshLegal();
     // Threat radar: warn if the opponent is now threatening something big.
@@ -269,6 +329,7 @@
     if (P.busy) return; P.busy=true;
     P.fen=START; P.moves=[]; P.sel=null; P.last=null; P.coaching=null; P.showRef=false;
     P.humanAccs=[]; P.evalWhiteCp=0; P.saved=false; P.plan=null; P.arrows=[];
+    P.streak=0; P.prevYourWin=50; P.hanging=[]; P.targets=[];
     P.human=el("colorSel").value; P.level=parseInt(el("levelSel").value,10); P.orient=P.human;
     renderPlay();
     setStatus("New game. "+(P.human==="white"?"Your move.":"Engine to move…"),false,P.human==="black");
@@ -490,6 +551,7 @@
   el("flipBtn").onclick=flip; refBtn.onclick=toggleRef; el("planBtn").onclick=plan;
   el("llmChk").onchange=function(e){ P.useLlm=e.target.checked; };
   el("analogyChk").onchange=function(e){ P.analogy=e.target.checked; renderPanel(); };
+  el("glowChk").onchange=function(e){ P.showGlow=e.target.checked; renderPlay(); };
   el("colorSel").onchange=newGame; el("levelSel").onchange=function(e){ P.level=parseInt(e.target.value,10); };
   document.addEventListener("keydown",function(e){
     if (!document.querySelector('section[data-view="play"]').hidden){

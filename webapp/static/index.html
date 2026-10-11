@@ -39,8 +39,11 @@
                 </defs>
               </svg>
               <div class="promo" id="promo" hidden></div>
+              <canvas class="fx" id="fx" aria-hidden="true"></canvas>
+              <div class="momentum" id="momentum" hidden></div>
             </div>
           </div>
+          <div class="winpct" id="winpct" hidden></div>
           <div class="statusline" id="statusline">Your move.</div>
           <div class="controls">
             <button class="ctl" id="newBtn">New game</button>
@@ -84,6 +87,10 @@
             <div class="field checkbox">
               <input type="checkbox" id="analogyChk">
               <label for="analogyChk">Explain with real-world analogies</label>
+            </div>
+            <div class="field checkbox">
+              <input type="checkbox" id="glowChk" checked>
+              <label for="glowChk">Show threats &amp; chances on the board</label>
             </div>
           </div>
           <div class="moves"><h2>Moves</h2><div class="movegrid" id="movegrid"></div></div>
