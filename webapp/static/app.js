@@ -108,7 +108,7 @@
   // ================= PLAY =================
   var P = { fen:START, orient:"white", human:"white", level:3, useLlm:true,
     moves:[], legal:[], sel:null, last:null, coaching:null, showRef:false, busy:false,
-    humanAccs:[], evalWhiteCp:0, saved:false, plan:null, arrows:[] };
+    humanAccs:[], evalWhiteCp:0, saved:false, plan:null, arrows:[], analogy:false };
   var el = function(id){ return document.getElementById(id); };
   var pboard=el("board"), parrows=el("arrows"), ppanel=el("panel"),
       pstatus=el("statusline"), pmoves=el("movegrid"), promo=el("promo"), refBtn=el("refBtn");
@@ -121,12 +121,29 @@
     renderPanel(); renderMoves(); renderEval(); renderAcc();
   }
   function renderPanel(){
-    if (P.plan){ ppanel.innerHTML = planHTML(P.plan); refBtn.disabled=true; return; }
+    if (P.plan){ ppanel.innerHTML = planHTML(P.plan) + analogyHTML(P.plan.conceptKey); refBtn.disabled=true; return; }
     if (!P.coaching){ ppanel.innerHTML='<p class="empty">Make a move and your coaching appears here.</p>';
       refBtn.disabled=true; return; }
-    ppanel.innerHTML = panelHTML(P.coaching, P.showRef);
+    ppanel.innerHTML = panelHTML(P.coaching, P.showRef) + analogyHTML(P.coaching.conceptKey);
     refBtn.disabled = !(P.coaching.refuteFrom && !P.coaching.isBest);
     refBtn.setAttribute("aria-pressed", P.showRef?"true":"false");
+  }
+  var CONCEPTS = {};
+  function analogyHTML(key){
+    if (!P.analogy || !key || !CONCEPTS[key]) return "";
+    return '<div class="analogy">⚔ '+esc(CONCEPTS[key].analogy)+'</div>';
+  }
+  async function loadConcepts(){
+    try{ var d=await api("/api/concepts",{});
+      (d.concepts||[]).forEach(function(c){ CONCEPTS[c.key]=c; });
+      var grid=el("conceptGrid"); if(!grid) return; grid.innerHTML="";
+      (d.concepts||[]).forEach(function(c){
+        var card=document.createElement("div"); card.className="ccard";
+        card.innerHTML='<h3>'+esc(c.title)+'</h3><p class="def">'+esc(c.definition)+'</p>'+
+          '<p class="ana">⚔ '+esc(c.analogy)+'</p>';
+        grid.appendChild(card);
+      });
+    }catch(e){}
   }
   function planHTML(d){
     var h='<div class="verdict"><span class="badge" style="background:var(--accent)">PLAN · '+esc(d.phase)+'</span>'+
@@ -447,6 +464,7 @@
   el("newBtn").onclick=newGame; el("undoBtn").onclick=undo; el("hintBtn").onclick=hint;
   el("flipBtn").onclick=flip; refBtn.onclick=toggleRef; el("planBtn").onclick=plan;
   el("llmChk").onchange=function(e){ P.useLlm=e.target.checked; };
+  el("analogyChk").onchange=function(e){ P.analogy=e.target.checked; renderPanel(); };
   el("colorSel").onchange=newGame; el("levelSel").onchange=function(e){ P.level=parseInt(e.target.value,10); };
   document.addEventListener("keydown",function(e){
     if (!document.querySelector('section[data-view="play"]').hidden){
@@ -462,6 +480,6 @@
   el("dfirst").onclick=function(){reviewStep(null,0);}; el("dprev").onclick=function(){reviewStep(-1);};
   el("dnext").onclick=function(){reviewStep(1);}; el("dlast").onclick=function(){reviewStep(null,D.review?D.review.length-1:0);};
 
-  loadHealth(); renderPlay();
+  loadHealth(); loadConcepts(); renderPlay();
   refreshLegal().then(function(){ setStatus("Your move."); }).catch(function(e){ setStatus("Error: "+e.message,true); });
 })();

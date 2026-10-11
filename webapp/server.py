@@ -25,7 +25,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import chess
 import chess.pgn
 
-from chesscoach import store
+from chesscoach import analogies, store
 from chesscoach.accuracy import accuracy_from_cp, game_accuracy
 from chesscoach.classify import Quality, classify
 from chesscoach.coach import _is_sacrifice
@@ -105,6 +105,7 @@ def coach_payload(board: chess.Board, move: chess.Move, use_llm: bool) -> dict:
     payload = {
         "san": san,
         "fenBefore": board.fen(),
+        "conceptKey": analogies.concept_for_tag(tag),
         "quality": verdict.quality.value,
         "glyph": verdict.quality.glyph,
         "cpLoss": verdict.cp_loss,
@@ -246,9 +247,14 @@ def api_plan(body: dict) -> dict:
         "yourPlan": brief.your_plan, "opponentPlan": brief.opponent_plan,
         "pawnBreaks": brief.pawn_breaks, "improve": brief.improve,
         "lineTheme": brief.line_theme, "text": text, "source": source,
+        "conceptKey": analogies.concept_for_plan(brief.your_plan),
         "bestFrom": _sq(pre.best.move.from_square), "bestTo": _sq(pre.best.move.to_square),
         "bestSan": pre.best.san,
     }
+
+
+def api_concepts(_body: dict) -> dict:
+    return {"concepts": analogies.concept_list()}
 
 
 def api_save(body: dict) -> dict:
@@ -470,6 +476,7 @@ ROUTES = {
     "/api/hint": api_hint,
     "/api/threat": api_threat,
     "/api/plan": api_plan,
+    "/api/concepts": api_concepts,
     "/api/save": api_save,
     "/api/games": api_games,
     "/api/game": api_game,

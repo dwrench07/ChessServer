@@ -87,6 +87,14 @@ button.ctl[aria-pressed="true"]{background:var(--accent);color:#fff;border-color
 .panelnote{margin-top:14px;font-size:.8rem;color:var(--muted);border-top:1px solid var(--line);padding-top:12px}
 .recurring{margin-top:14px;background:color-mix(in srgb,var(--mistake) 12%,var(--surface));
   border:1px solid var(--mistake);border-radius:8px;padding:9px 11px;font-size:.84rem;color:var(--fg)}
+.analogy{margin-top:12px;font-size:.86rem;font-style:italic;color:var(--fg);
+  border-left:3px solid var(--accent);padding:4px 0 4px 10px}
+.conceptintro{color:var(--muted);max-width:62ch;margin:0 0 18px;font-size:.95rem}
+.conceptgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+.ccard{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;box-shadow:var(--shadow)}
+.ccard h3{font-family:var(--font-display);font-weight:600;font-size:1.02rem;margin:0 0 6px}
+.ccard .def{font-size:.86rem;margin:0 0 10px}
+.ccard .ana{font-size:.86rem;font-style:italic;color:var(--fg);border-left:3px solid var(--accent);padding-left:10px}
 
 .settings{display:flex;gap:14px;flex-wrap:wrap;margin-top:16px;padding:14px;background:var(--surface);
   border:1px solid var(--line);border-radius:12px}

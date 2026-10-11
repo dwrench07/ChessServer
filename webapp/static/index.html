@@ -16,6 +16,7 @@
       <nav class="nav">
         <button class="navbtn" data-view="play" aria-current="true">Play</button>
         <button class="navbtn" data-view="dash">Dashboard</button>
+        <button class="navbtn" data-view="concepts">Concepts</button>
       </nav>
       <span class="health" id="health" title="engine / model status"></span>
     </header>
@@ -80,6 +81,10 @@
               <input type="checkbox" id="llmChk" checked>
               <label for="llmChk" id="llmLabel">Use local LLM for explanations</label>
             </div>
+            <div class="field checkbox">
+              <input type="checkbox" id="analogyChk">
+              <label for="analogyChk">Explain with real-world analogies</label>
+            </div>
           </div>
           <div class="moves"><h2>Moves</h2><div class="movegrid" id="movegrid"></div></div>
         </div>
@@ -137,6 +142,14 @@
           </div>
         </aside>
       </div>
+    </section>
+
+    <!-- ============ CONCEPTS VIEW ============ -->
+    <section data-view="concepts" hidden>
+      <p class="conceptintro">Chess is abstract warfare. Each idea below maps to a real-world
+        parallel that teaches the same principle — turn on "Explain with real-world analogies"
+        in Play to see these woven into your coaching.</p>
+      <div class="conceptgrid" id="conceptGrid"></div>
     </section>
   </div>
   <script src="app.js"></script>

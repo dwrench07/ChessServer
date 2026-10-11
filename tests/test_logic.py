@@ -105,6 +105,17 @@ def test_strategy_phase_and_brief():
     assert isinstance(br.character, str) and br.character
 
 
+def test_analogies_mapping():
+    from chesscoach import analogies
+    assert analogies.concept_for_tag("hangs_piece") == "hanging_piece"
+    assert analogies.concept_for_tag(None) is None
+    assert analogies.concept_for_plan(["plant a knight on the d5 outpost"]) == "outpost"
+    assert analogies.concept_for_plan(["seize the open c-file with a rook"]) == "open_file"
+    # every concept has the three teaching fields
+    for c in analogies.concept_list():
+        assert c["title"] and c["definition"] and c["analogy"]
+
+
 def test_opening_classifier():
     from chesscoach.analytics import name_opening
     assert name_opening(["e4", "e5", "Nf3", "Nc6", "Bb5"]) == "Ruy Lopez"
