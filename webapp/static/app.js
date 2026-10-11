@@ -556,6 +556,7 @@
     document.querySelectorAll("section[data-view]").forEach(function(s){ s.hidden = s.dataset.view!==v; });
     if (v==="dash"){ loadDash(); }
     if (v==="progress"){ loadProgress(); }
+    if (v==="train"){ loadTrain(); }
   }
 
   // ================= progression =================
@@ -596,6 +597,148 @@
     setTimeout(function(){ g.classList.remove("show");
       setTimeout(function(){ g.remove(); },400); }, 2600);
   }
+  // ================= Puzzle Rush (Train) =================
+  var PZ = { puzzles:[], idx:0, fen:null, orient:"white", legal:[], sel:null,
+    cur:null, solved:0, streak:0, best:0, active:false, busy:false, over:false };
+  var pzBoard=el("pzBoard"), pzArrows=el("pzArrows"), pzPromo=el("pzPromo"),
+      pzPanel=el("pzPanel"), pzStatus=el("pzStatus"), pzScore=el("pzScore");
+
+  function pzSetStatus(t){ pzStatus.textContent=t; }
+  function pzRenderScore(){
+    if (!PZ.active && !PZ.over){ pzScore.hidden=true; return; }
+    pzScore.hidden=false;
+    pzScore.innerHTML='<div class="pzmetric"><b>'+PZ.solved+'</b><span>solved</span></div>'+
+      '<div class="pzmetric"><b>'+PZ.streak+'</b><span>streak</span></div>'+
+      '<div class="pzmetric"><b>'+PZ.best+'</b><span>best</span></div>';
+  }
+  function pzDraw(opts){
+    opts=opts||{};
+    drawBoard(pzBoard, PZ.fen, PZ.orient, {
+      sel:PZ.sel, last:opts.last,
+      targets: PZ.sel?pzTargets(PZ.sel):[],
+      onClick: pzClick,
+    });
+    pzArrows.querySelectorAll("line,circle").forEach(function(n){n.remove();});
+    if (opts.arrow) drawArrows(pzArrows, PZ.orient, [opts.arrow]);
+  }
+  function pzTargets(from){ var o=[]; PZ.legal.forEach(function(u){ if(u.slice(0,2)===from)o.push(u.slice(2,4)); }); return o; }
+
+  async function loadTrain(){
+    if (PZ.active) return;  // keep a rush in progress when returning to the tab
+    try{
+      var r=await api("/api/puzzles",{order:el("pzOrder").value,limit:40});
+      PZ.puzzles=r.puzzles||[];
+      if (!PZ.puzzles.length){
+        pzPanel.innerHTML='<p class="empty">No puzzles yet. Puzzle Rush is built from your own '+
+          'mistakes — play and finish a few games (they save automatically), then come back '+
+          'to redeem the moves you missed.</p>';
+        el("pzStartBtn").disabled=true;
+        pzSetStatus("Nothing to train yet — go play a game.");
+      } else {
+        pzPanel.innerHTML='<p class="empty">Ready: <b>'+PZ.puzzles.length+'</b> position'+
+          (PZ.puzzles.length===1?"":"s")+' drawn from your own games are waiting. '+
+          'Hit <b>Start rush</b> and find the move you missed.</p>';
+        el("pzStartBtn").disabled=false;
+        pzSetStatus("Ready. "+PZ.puzzles.length+" of your own mistakes to redeem.");
+      }
+    }catch(e){ pzPanel.innerHTML='<p class="empty">Could not load puzzles.</p>'; }
+  }
+
+  async function pzStart(){
+    await loadTrain();
+    if (!PZ.puzzles.length) return;
+    PZ.active=true; PZ.over=false; PZ.idx=0; PZ.solved=0; PZ.streak=0; PZ.best=0;
+    el("pzSkipBtn").disabled=false; el("pzSolveBtn").disabled=false; el("pzStartBtn").textContent="Restart";
+    pzRenderScore();
+    await pzLoad(0);
+  }
+
+  async function pzLoad(i){
+    PZ.busy=true; PZ.sel=null; pzPromo.hidden=true;
+    if (i>=PZ.puzzles.length){ pzFinish(true); return; }
+    PZ.idx=i; var p=PZ.puzzles[i]; PZ.cur=p;
+    PZ.fen=p.fen; PZ.orient=p.sideToMove;
+    try{ var lg=await api("/api/legal",{fen:p.fen}); PZ.legal=lg.ucis||[]; }
+    catch(e){ PZ.legal=[]; }
+    var side=p.sideToMove==="white"?"White":"Black";
+    pzPanel.innerHTML='<div class="pztheme">'+esc(p.theme)+'</div>'+
+      '<p class="why">You played <b>'+esc(p.playedSan||"?")+'</b> here — a '+esc(p.quality)+
+      '. <b>'+side+'</b> to move: find the move you missed.</p>'+
+      '<div class="panelnote">Puzzle '+(i+1)+' of '+PZ.puzzles.length+
+      ' · from game #'+esc(String(p.gameId))+'</div>';
+    pzSetStatus(side+" to move — your turn to get it right.");
+    pzDraw();
+    PZ.busy=false;
+  }
+
+  function pzClick(e){
+    if (PZ.busy || !PZ.active || PZ.over) return;
+    var sq=e.currentTarget.dataset.sq;
+    if (PZ.sel){
+      if (sq===PZ.sel){ PZ.sel=null; pzDraw(); return; }
+      if (pzTargets(PZ.sel).indexOf(sq)>=0){ pzAttempt(PZ.sel,sq); return; }
+    }
+    if (pzTargets(sq).length){ PZ.sel=sq; pzDraw(); } else { PZ.sel=null; pzDraw(); }
+  }
+  function pzAttempt(from,to){
+    var cands=PZ.legal.filter(function(u){ return u.slice(0,4)===from+to; });
+    if (cands.length>1){ pzShowPromo(from,to,cands); return; }
+    if (cands.length===1) pzCheck(cands[0]);
+  }
+  function pzShowPromo(from,to,cands){
+    pzPromo.hidden=false; pzPromo.innerHTML="";
+    ["q","r","b","n"].forEach(function(pc){ var u=from+to+pc; if(cands.indexOf(u)<0)return;
+      var b=document.createElement("button"); b.textContent=GLYPH[pc];
+      b.addEventListener("click",function(){ pzPromo.hidden=true; pzCheck(u); }); pzPromo.appendChild(b); });
+  }
+
+  async function pzCheck(uci){
+    if (PZ.busy) return; PZ.busy=true; PZ.sel=null;
+    pzSetStatus("Checking…");
+    try{
+      var r=await api("/api/puzzle/check",{fen:PZ.fen,uci:uci});
+      var from=uci.slice(0,2), to=uci.slice(2,4);
+      if (r.solved){
+        PZ.solved++; PZ.streak++; PZ.best=Math.max(PZ.best,PZ.streak); pzRenderScore();
+        pzPanel.innerHTML='<div class="pzverdict good">✓ Solved</div><p class="why">'+esc(r.message)+'</p>';
+        pzDraw({arrow:{from:from,to:to,color:cvar("--good")}, last:{from:from,to:to}});
+        pzSetStatus("Correct — next position…");
+        setTimeout(function(){ pzLoad(PZ.idx+1); }, 1100);
+      } else {
+        pzPanel.innerHTML='<div class="pzverdict bad">✕ '+esc(r.message)+'</div>';
+        pzDraw({arrow:{from:r.bestFrom,to:r.bestTo,color:cvar("--accent")}, last:{from:from,to:to}});
+        PZ.streak=0; pzRenderScore();
+        pzFinish(false);
+      }
+    }catch(e){ pzSetStatus("Error checking move: "+e.message); PZ.busy=false; }
+  }
+
+  async function pzSolve(){
+    if (!PZ.active || PZ.over || PZ.busy || !PZ.cur) return;
+    PZ.busy=true;
+    try{
+      // Ask the engine for the move by checking the played blunder; the response
+      // always carries the best move regardless of the candidate.
+      var r=await api("/api/puzzle/check",{fen:PZ.fen,uci:PZ.cur.playedUci});
+      pzPanel.innerHTML='<div class="pzverdict bad">Shown</div><p class="why">The move was <b>'+
+        esc(r.bestSan)+'</b>. '+esc(r.bestLine.join(" "))+'</p>';
+      pzDraw({arrow:{from:r.bestFrom,to:r.bestTo,color:cvar("--accent")}});
+      PZ.streak=0; pzRenderScore();
+    }catch(e){ pzSetStatus("Error: "+e.message); }
+    PZ.busy=false;
+    setTimeout(function(){ if(PZ.active && !PZ.over) pzLoad(PZ.idx+1); }, 1400);
+  }
+
+  function pzSkip(){ if(PZ.active && !PZ.over && !PZ.busy){ PZ.streak=0; pzRenderScore(); pzLoad(PZ.idx+1); } }
+
+  function pzFinish(cleared){
+    PZ.over=true; PZ.active=false; PZ.busy=false;
+    el("pzSkipBtn").disabled=true; el("pzSolveBtn").disabled=true; el("pzStartBtn").textContent="Start rush";
+    pzRenderScore();
+    var head=cleared? "Cleared every puzzle!" : "Rush over.";
+    pzSetStatus(head+"  Solved "+PZ.solved+", best streak "+PZ.best+".");
+  }
+
   async function loadHealth(){
     try{ var h=await api("/api/health",{});
       el("health").textContent="engine "+(h.engine?"✓":"✗")+"  ·  LLM "+(h.ollama?h.model:"off");
@@ -622,6 +765,9 @@
   // wire up dashboard
   document.querySelectorAll(".navbtn").forEach(function(b){ b.onclick=function(){ showView(b.dataset.view); }; });
   el("lichessBtn").onclick=importLichess; el("pgnBtn").onclick=importPgn;
+  // wire up train / puzzle rush
+  el("pzStartBtn").onclick=pzStart; el("pzSkipBtn").onclick=pzSkip; el("pzSolveBtn").onclick=pzSolve;
+  el("pzOrder").onchange=function(){ if(!PZ.active){ loadTrain(); } };
   el("dfirst").onclick=function(){reviewStep(null,0);}; el("dprev").onclick=function(){reviewStep(-1);};
   el("dnext").onclick=function(){reviewStep(1);}; el("dlast").onclick=function(){reviewStep(null,D.review?D.review.length-1:0);};
 

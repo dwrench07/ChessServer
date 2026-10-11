@@ -15,6 +15,7 @@
       <h1>chesscoach</h1>
       <nav class="nav">
         <button class="navbtn" data-view="play" aria-current="true">Play</button>
+        <button class="navbtn" data-view="train">Train</button>
         <button class="navbtn" data-view="dash">Dashboard</button>
         <button class="navbtn" data-view="progress">Progress</button>
         <button class="navbtn" data-view="concepts">Concepts</button>
@@ -96,6 +97,43 @@
             </div>
           </div>
           <div class="moves"><h2>Moves</h2><div class="movegrid" id="movegrid"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ TRAIN VIEW (Puzzle Rush) ============ -->
+    <section data-view="train" hidden>
+      <div class="grid">
+        <div class="boardcol">
+          <div class="boardrow">
+            <div class="board-wrap" id="pzWrap">
+              <div class="board" id="pzBoard"></div>
+              <svg class="arrows" id="pzArrows" viewBox="0 0 80 80" preserveAspectRatio="none" aria-hidden="true">
+                <defs><marker id="ah3" markerWidth="4" markerHeight="4" refX="2.1" refY="2" orient="auto">
+                  <path d="M0,0 L4,2 L0,4 z" fill="context-stroke"/></marker></defs>
+              </svg>
+              <div class="promo" id="pzPromo" hidden></div>
+            </div>
+          </div>
+          <div class="statusline" id="pzStatus">Puzzle Rush replays the exact positions where you went wrong.</div>
+          <div class="controls">
+            <button class="ctl" id="pzStartBtn">Start rush</button>
+            <button class="ctl" id="pzSkipBtn" disabled>Skip</button>
+            <button class="ctl" id="pzSolveBtn" disabled>Show the move</button>
+            <select id="pzOrder" title="puzzle order">
+              <option value="severity" selected>Worst blunders first</option>
+              <option value="recency">Most recent first</option>
+            </select>
+          </div>
+        </div>
+        <div class="sidecol">
+          <div class="panel" id="pzPanel">
+            <p class="empty">These puzzles are mined from your own saved games — every
+              mistake and blunder becomes a position to redeem. Play a few games first,
+              then come back and find the moves you missed. Solve to keep your streak
+              alive; one wrong answer ends the rush.</p>
+          </div>
+          <div class="pzscore" id="pzScore" hidden></div>
         </div>
       </div>
     </section>

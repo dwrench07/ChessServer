@@ -178,6 +178,59 @@ def test_template_never_empty():
     assert "Qd7+" in text and len(text) > 20
 
 
+def test_puzzles_extracted_from_human_mistakes_only():
+    from chesscoach.puzzles import extract_puzzles
+
+    board = chess.Board()
+    ucis = ["e2e4", "e7e5", "f1c4", "b8c6", "d1h5", "g8f6"]
+    moves = []
+    for i, u in enumerate(ucis, 1):
+        mv = chess.Move.from_uci(u)
+        side = "white" if board.turn == chess.WHITE else "black"
+        q = cl = tag = None
+        if i == 6:                       # black's 6th: a blunder (allows mate)
+            q, cl, tag = "blunder", 900, "allows_mate"
+        if i == 3:                       # white's 3rd: a big mistake
+            q, cl, tag = "mistake", 200, None
+        moves.append({"ply": i, "side": side, "san": board.san(mv), "uci": u,
+                      "quality": q, "cp_loss": cl, "tag": tag})
+        board.push(mv)
+    game = {"id": 7, "human_color": "black", "created_at": 1.0, "moves": moves}
+
+    pz = extract_puzzles([game])
+    # Only the human's (black) blunder becomes a puzzle, not white's mistake.
+    assert len(pz) == 1
+    p = pz[0]
+    assert p["sideToMove"] == "black" and p["playedSan"] == "Nf6"
+    assert p["cpLoss"] == 900 and p["gameId"] == 7
+    # The FEN is the position *before* the blunder (black to move, before Nf6).
+    assert chess.Board(p["fen"]).turn == chess.BLACK
+
+    # Below-threshold mistakes and imports (no human side) yield nothing.
+    tiny = {"id": 8, "human_color": "white", "created_at": 2.0,
+            "moves": [{"ply": 1, "side": "white", "san": "e4", "uci": "e2e4",
+                       "quality": "mistake", "cp_loss": 40, "tag": None}]}
+    imported = {"id": 9, "human_color": None, "created_at": 3.0, "moves": moves}
+    assert extract_puzzles([tiny]) == []
+    assert extract_puzzles([imported]) == []
+
+
+def test_puzzles_dedupe_keeps_most_severe():
+    from chesscoach.puzzles import extract_puzzles
+
+    def game(gid, cp_loss, created):
+        b = chess.Board()
+        mv = chess.Move.from_uci("g1f3")
+        rec = {"ply": 1, "side": "white", "san": b.san(mv), "uci": "g1f3",
+               "quality": "blunder", "cp_loss": cp_loss, "tag": None}
+        return {"id": gid, "human_color": "white", "created_at": created,
+                "moves": [rec]}
+
+    # Same starting position blundered twice; keep the worse instance.
+    pz = extract_puzzles([game(1, 150, 1.0), game(2, 500, 2.0)])
+    assert len(pz) == 1 and pz[0]["cpLoss"] == 500
+
+
 if __name__ == "__main__":
     import traceback
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]

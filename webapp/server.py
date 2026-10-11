@@ -366,6 +366,71 @@ def api_profile(_body: dict) -> dict:
     }
 
 
+def api_puzzles(body: dict) -> dict:
+    """Mine the learner's own mistakes into a Puzzle Rush queue (no engine)."""
+    from chesscoach import puzzles as _puz
+    games = store.all_games_with_moves()
+    order = body.get("order", "severity")
+    limit = int(body.get("limit", 40))
+    return {"puzzles": _puz.extract_puzzles(games, limit=limit, order=order)}
+
+
+def api_puzzle_check(body: dict) -> dict:
+    """Score a candidate move against the engine's best for a puzzle position.
+
+    The engine is the source of truth: a solve is the engine's top move, or any
+    move within a small centipawn tolerance of it (an equally good answer).
+    """
+    board = chess.Board(body["fen"])
+    try:
+        mv = chess.Move.from_uci(body["uci"])
+    except ValueError:
+        raise ValueError("Malformed move.")
+    if mv not in board.legal_moves:
+        raise ValueError("Illegal move for this position.")
+
+    your_san = board.san(mv)
+    with _engine_lock:
+        az = get_analyzer()
+        pre = az.analyse_position(board, multipv=3)
+        cand = az.evaluate_after(board, mv)
+
+    best = pre.best
+    cp_loss = max(0, best.score_cp - cand.score_cp)
+    solved = (mv == best.move) or (cp_loss <= 30)
+    tail = (" — " + " ".join(best.pv_san[:4])) if best.pv_san else ""
+
+    if solved and mv == best.move:
+        message = f"Exactly — {your_san} is the move."
+    elif solved:
+        message = f"Good — {your_san} is just as strong as the engine's {best.san}."
+    elif best.mate_in and best.mate_in > 0:
+        # The win was a forced mate the player missed.
+        message = f"Missed the finish — {best.san} forces mate{tail}."
+    elif cand.mate_in and cand.mate_in < 0:
+        # The candidate walks into a forced mate.
+        message = f"That walks into mate. The move was {best.san}{tail}."
+    elif cp_loss >= 1000:
+        # Decisive material swing — a pawn figure here is meaningless noise.
+        message = f"That loses decisively. The move was {best.san}{tail}."
+    else:
+        message = f"Not quite. {your_san} gives back {cp_loss/100:.1f}; the move was {best.san}{tail}."
+
+    return {
+        "solved": solved,
+        "yourSan": your_san,
+        "yourCp": cand.score_cp,
+        "cpLoss": cp_loss,
+        "bestUci": best.move.uci(),
+        "bestSan": best.san,
+        "bestFrom": _sq(best.move.from_square),
+        "bestTo": _sq(best.move.to_square),
+        "bestLine": best.pv_san[:5],
+        "bestCp": best.score_cp,
+        "message": message,
+    }
+
+
 def api_games(body: dict) -> dict:
     return {"games": store.list_games(int(body.get("limit", 50)))}
 
@@ -559,6 +624,8 @@ ROUTES = {
     "/api/concepts": api_concepts,
     "/api/save": api_save,
     "/api/profile": api_profile,
+    "/api/puzzles": api_puzzles,
+    "/api/puzzle/check": api_puzzle_check,
     "/api/games": api_games,
     "/api/game": api_game,
     "/api/dashboard": api_dashboard,
