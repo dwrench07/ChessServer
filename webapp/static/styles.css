@@ -70,6 +70,11 @@ canvas.fx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z
 .winpct .wfill{height:100%;background:var(--piece-white)}
 .winpct .wyou{font-family:var(--font-mono);color:var(--fg);font-variant-numeric:tabular-nums}
 .streak{display:inline-flex;align-items:center;gap:4px;font-size:.76rem;color:var(--mistake);font-weight:600}
+.pulsebar{width:fit-content;margin:8px auto 0;font-size:.8rem;padding:4px 10px;border-radius:999px;
+  border:1px solid var(--line);text-align:center}
+.pulsebar.sharp-quiet{color:var(--muted);background:var(--surface)}
+.pulsebar.sharp-tense{color:var(--inaccuracy);background:color-mix(in srgb,var(--inaccuracy) 10%,var(--surface));border-color:var(--inaccuracy)}
+.pulsebar.sharp-sharp{color:var(--blunder);background:color-mix(in srgb,var(--blunder) 10%,var(--surface));border-color:var(--blunder);font-weight:600}
 
 .promo{position:absolute;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;
   justify-content:center;gap:8px;z-index:5}

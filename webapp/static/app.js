@@ -230,6 +230,15 @@
   }
   function setStatus(t,alert,spin){ pstatus.className="statusline"+(alert?" alert":"");
     pstatus.innerHTML=(spin?'<span class="spin"></span> ':"")+esc(t); }
+  function renderPulse(pulse){
+    var b=el("pulseBar");
+    if(!pulse){ b.hidden=true; return; }
+    b.hidden=false; b.className="pulsebar sharp-"+pulse.sharpness;
+    var label = pulse.sharpness==="sharp"?"⚡ Sharp position"
+              : pulse.sharpness==="tense"?"Tense position":"Quiet — play on principle";
+    var extra = pulse.critical?(" · "+pulse.criticalText):"";
+    b.textContent=label+extra;
+  }
 
   async function refreshLegal(){ var st=await api("/api/legal",{fen:P.fen});
     P.legal=st.ucis||[]; P.hanging=st.hanging||[]; P.targets=st.targets||[]; return st; }
@@ -238,6 +247,7 @@
 
   async function humanMove(uci){
     if (P.busy) return; P.busy=true; P.sel=null; P.showRef=false; P.plan=null;
+    el("pulseBar").hidden=true;
     setStatus("Coach is thinking…",false,true);
     try{
       var num=fullmove(P.fen), side=turnOf(P.fen);
@@ -269,11 +279,14 @@
     if (r.san.indexOf("x")>=0) captureFx(r.to);
     if (r.gameOver){ await endGame(r); return; }
     await refreshLegal();
-    // Threat radar: warn if the opponent is now threatening something big.
+    // Threat radar + pulse: warn about the opponent's threat and read the
+    // position's sharpness / whether you have a tactic.
     try{
       var t=await api("/api/threat",{fen:P.fen});
+      renderPulse(t.pulse);
       if (t.threat){ P.arrows=[{from:t.threat.from,to:t.threat.to,color:cvar("--blunder")}];
         drawArrows(parrows,P.orient,P.arrows); setStatus("⚠ "+t.threat.text+" Your move."); return; }
+      if (t.pulse && t.pulse.tactic){ setStatus(t.pulse.tacticText+" Your move."); return; }
     }catch(e){}
     setStatus("Your move.");
   }
@@ -329,7 +342,7 @@
     if (P.busy) return; P.busy=true;
     P.fen=START; P.moves=[]; P.sel=null; P.last=null; P.coaching=null; P.showRef=false;
     P.humanAccs=[]; P.evalWhiteCp=0; P.saved=false; P.plan=null; P.arrows=[];
-    P.streak=0; P.prevYourWin=50; P.hanging=[]; P.targets=[];
+    P.streak=0; P.prevYourWin=50; P.hanging=[]; P.targets=[]; renderPulse(null);
     P.human=el("colorSel").value; P.level=parseInt(el("levelSel").value,10); P.orient=P.human;
     renderPlay();
     setStatus("New game. "+(P.human==="white"?"Your move.":"Engine to move…"),false,P.human==="black");

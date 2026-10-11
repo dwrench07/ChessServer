@@ -208,40 +208,65 @@ def api_hint(body: dict) -> dict:
 
 
 def api_threat(body: dict) -> dict:
-    """The opponent's biggest threat in the current position (null-move method).
-
-    If the side to move passed, what would the opponent do? If that free move
-    gains a lot, it is a real threat worth warning about.
-    """
+    """Live read of the position: the opponent's biggest threat (null-move
+    method) plus a 'pulse' — how sharp the position is, whether it's a critical
+    moment, and whether the side to move has a tactic (without revealing it)."""
     board = chess.Board(body["fen"])
-    if board.is_game_over() or board.is_check():
-        return {"threat": None}
+    if board.is_game_over():
+        return {"threat": None, "pulse": None}
+
     with _engine_lock:
-        az = get_analyzer()
-        now = az.analyse_position(board, multipv=1)
-        e_now = now.best.score_cp                      # side-to-move POV
-        board.push(chess.Move.null())
-        after = az.analyse_position(board, multipv=1)  # opponent to move = the threat
-        threat_move = after.best.move
-        threat_san = board.san(threat_move)
-        mate = after.best.mate_in
-        e_pass = -after.best.score_cp                  # back to our POV
-        target = board.piece_at(threat_move.to_square)
-        cap_name = _PIECE_NAMES.get(target.piece_type) if target else None
-        tfrom, tto = _sq(threat_move.from_square), _sq(threat_move.to_square)
-        board.pop()
-    threat_size = e_now - e_pass                        # how much we lose by passing
-    if (mate is not None and mate > 0) or threat_size >= 150:
-        if mate is not None and mate > 0:
-            text = f"They're threatening mate with {threat_san}."
-        elif cap_name and cap_name != "pawn":
-            text = f"They're threatening to win your {cap_name} with {threat_san}."
-        elif threat_size >= 900:
-            text = f"They're threatening {threat_san} — a decisive blow."
-        else:
-            text = f"They're threatening {threat_san}, worth about {threat_size / 100:.1f} pawns."
-        return {"threat": {"from": tfrom, "to": tto, "san": threat_san, "text": text}}
-    return {"threat": None}
+        now = get_analyzer().analyse_position(board, multipv=3)
+    alts = now.alternatives
+    best = alts[0]
+    gap = (best.score_cp - alts[1].score_cp) if len(alts) >= 2 else 999
+
+    # Sharpness / criticality from the spread between the best moves.
+    if gap >= 150 or best.mate_in is not None:
+        sharp = "sharp"
+    elif gap >= 60:
+        sharp = "tense"
+    else:
+        sharp = "quiet"
+    critical = gap >= 150 and best.mate_in is None
+    # Tactic for the side to move: the best move is forcing AND much better.
+    forcing = board.is_capture(best.move)
+    if not forcing:
+        b2 = board.copy(stack=False); b2.push(best.move); forcing = b2.is_check()
+    tactic = (best.mate_in is not None and best.mate_in > 0) or (gap >= 120 and best.score_cp >= 100 and forcing)
+    pulse = {
+        "sharpness": sharp, "critical": critical, "tactic": tactic,
+        "criticalText": "Critical moment — essentially one move holds." if critical else None,
+        "tacticText": "\U0001F440 There's something here — look for a tactic." if tactic else None,
+    }
+
+    threat = None
+    if not board.is_check():
+        with _engine_lock:
+            az = get_analyzer()
+            e_now = now.best.score_cp
+            board.push(chess.Move.null())
+            after = az.analyse_position(board, multipv=1)
+            threat_move = after.best.move
+            threat_san = board.san(threat_move)
+            mate = after.best.mate_in
+            e_pass = -after.best.score_cp
+            tgt = board.piece_at(threat_move.to_square)
+            cap_name = _PIECE_NAMES.get(tgt.piece_type) if tgt else None
+            tfrom, tto = _sq(threat_move.from_square), _sq(threat_move.to_square)
+            board.pop()
+        threat_size = e_now - e_pass
+        if (mate is not None and mate > 0) or threat_size >= 150:
+            if mate is not None and mate > 0:
+                text = f"They're threatening mate with {threat_san}."
+            elif cap_name and cap_name != "pawn":
+                text = f"They're threatening to win your {cap_name} with {threat_san}."
+            elif threat_size >= 900:
+                text = f"They're threatening {threat_san} — a decisive blow."
+            else:
+                text = f"They're threatening {threat_san}, worth about {threat_size / 100:.1f} pawns."
+            threat = {"from": tfrom, "to": tto, "san": threat_san, "text": text}
+    return {"threat": threat, "pulse": pulse}
 
 
 def api_plan(body: dict) -> dict:
