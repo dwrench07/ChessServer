@@ -166,6 +166,27 @@ def add_result(xp: float, won: bool, accuracy: float | None, streak: int = 0) ->
         return dict(conn.execute("SELECT * FROM profile WHERE id = 1").fetchone())
 
 
+def wins_by_level() -> dict[int, int]:
+    """How many played games the learner has *won* at each engine level.
+
+    Used by the campaign to decide which personas have been beaten. Counts only
+    games with a known human side and a decisive result in the human's favour.
+    """
+    out: dict[int, int] = {}
+    with _conn() as conn:
+        rows = conn.execute(
+            """SELECT level, result, human_color FROM games
+                WHERE human_color IS NOT NULL AND level IS NOT NULL
+                  AND result IN ('1-0', '0-1')"""
+        ).fetchall()
+    for r in rows:
+        won = (r["result"] == "1-0") == (r["human_color"] == "white")
+        if won:
+            lv = int(r["level"])
+            out[lv] = out.get(lv, 0) + 1
+    return out
+
+
 def tag_stats(tag: str) -> dict:
     """How often the learner has made a mistake of this motif before.
 

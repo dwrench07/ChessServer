@@ -111,7 +111,8 @@
   var P = { fen:START, orient:"white", human:"white", level:3, useLlm:true,
     moves:[], legal:[], sel:null, last:null, coaching:null, showRef:false, busy:false,
     humanAccs:[], evalWhiteCp:0, saved:false, plan:null, arrows:[], analogy:false,
-    showGlow:true, hanging:[], targets:[], streak:0, prevYourWin:50 };
+    showGlow:true, hanging:[], targets:[], streak:0, prevYourWin:50,
+    plotShown:[], persona:null };
   var el = function(id){ return document.getElementById(id); };
   var pboard=el("board"), parrows=el("arrows"), ppanel=el("panel"),
       pstatus=el("statusline"), pmoves=el("movegrid"), promo=el("promo"), refBtn=el("refBtn");
@@ -247,7 +248,7 @@
 
   async function humanMove(uci){
     if (P.busy) return; P.busy=true; P.sel=null; P.showRef=false; P.plan=null;
-    el("pulseBar").hidden=true;
+    el("pulseBar").hidden=true; el("plotLive").hidden=true;
     setStatus("Coach is thinking…",false,true);
     try{
       var num=fullmove(P.fen), side=turnOf(P.fen);
@@ -264,6 +265,7 @@
       if (c.san.indexOf("x")>=0) captureFx(c.playedTo);
       pushMove(side,c.san,uci,c.fen,num,c);
       renderPlay();
+      await maybePlot();  // your own move can be the strike too
       if (c.gameOver){ await endGame(c); P.busy=false; return; }
       await engineMove();
     }catch(e){ setStatus("Error: "+e.message,true); }
@@ -274,16 +276,22 @@
     var num=fullmove(P.fen), side=turnOf(P.fen);
     var r=await api("/api/engine",{fen:P.fen,level:P.level});
     P.fen=r.fen; P.last={from:r.from,to:r.to}; P.arrows=[];
-    pushMove(side,r.san,r.from+r.to,r.fen,num,null);
+    pushMove(side,r.san,r.from+r.to,r.fen,num,{playedFrom:r.from,playedTo:r.to,evalCp:null});
     renderPlay();
     if (r.san.indexOf("x")>=0) captureFx(r.to);
-    if (r.gameOver){ await endGame(r); return; }
+    if (r.gameOver){ await maybePlot(); await endGame(r); return; }
     await refreshLegal();
     // Threat radar + pulse: warn about the opponent's threat and read the
     // position's sharpness / whether you have a tactic.
     try{
       var t=await api("/api/threat",{fen:P.fen});
       renderPulse(t.pulse);
+      // Record the engine's move eval (engine POV) for the live-plot timeline,
+      // then check whether this move just sprang a long-laid plot.
+      if (t.pulse && t.pulse.evalCp!=null && P.moves.length){
+        P.moves[P.moves.length-1].coaching.evalCp = -t.pulse.evalCp;
+      }
+      await maybePlot();
       if (t.threat){ P.arrows=[{from:t.threat.from,to:t.threat.to,color:cvar("--blunder")}];
         drawArrows(parrows,P.orient,P.arrows); setStatus("⚠ "+t.threat.text+" Your move."); return; }
       if (t.pulse && t.pulse.tactic){ setStatus(t.pulse.tacticText+" Your move."); return; }
@@ -347,10 +355,14 @@
     if (P.busy) return; P.busy=true;
     P.fen=START; P.moves=[]; P.sel=null; P.last=null; P.coaching=null; P.showRef=false;
     P.humanAccs=[]; P.evalWhiteCp=0; P.saved=false; P.plan=null; P.arrows=[];
-    P.streak=0; P.prevYourWin=50; P.hanging=[]; P.targets=[]; renderPulse(null);
+    P.streak=0; P.prevYourWin=50; P.hanging=[]; P.targets=[]; P.plotShown=[];
+    renderPulse(null); el("plotLive").hidden=true;
     P.human=el("colorSel").value; P.level=parseInt(el("levelSel").value,10); P.orient=P.human;
     renderPlay();
-    setStatus("New game. "+(P.human==="white"?"Your move.":"Engine to move…"),false,P.human==="black");
+    var intro = P.persona
+      ? P.persona.icon+" "+P.persona.name+": “"+P.persona.voice+"”"
+      : "New game. "+(P.human==="white"?"Your move.":"Engine to move…");
+    setStatus(intro,false,P.human==="black");
     try{ if (P.human==="black"){ await engineMove(); } else { await refreshLegal(); } }
     catch(e){ setStatus("Error: "+e.message,true); }
     P.busy=false;
@@ -587,6 +599,8 @@
   async function loadProgress(){
     try{ var p=await api("/api/profile",{}); renderProgress(p); }
     catch(e){ el("levelCard").innerHTML='<p class="empty">Could not load progress.</p>'; }
+    try{ var cs=await api("/api/campaign",{}); renderCampaign(cs); }
+    catch(e){ el("campaignLadder").innerHTML='<p class="empty">Could not load the campaign.</p>'; }
   }
   function showGrade(pr){
     var g=document.createElement("div"); g.className="gradepop grade-"+(pr.grade[0]||"E").toLowerCase();
@@ -597,6 +611,78 @@
     setTimeout(function(){ g.classList.remove("show");
       setTimeout(function(){ g.remove(); },400); }, 2600);
   }
+
+  // ================= The Plot — live suspense =================
+  // Build the game-so-far as a mover-POV eval timeline for the server's
+  // live_plot detector. Evals carry forward in white-POV so a transient
+  // missing value never breaks continuity.
+  function plotReview(){
+    var out=[], lastWhite=0;
+    for (var i=0;i<P.moves.length;i++){
+      var m=P.moves[i], c=m.coaching||{};
+      var ev = (c.evalCp!=null) ? c.evalCp : null;  // mover POV
+      var white;
+      if (ev!=null){ white = (m.side==="white") ? ev : -ev; lastWhite = white; }
+      else { white = lastWhite; ev = (m.side==="white") ? white : -white; }
+      var pf = c.playedFrom || (m.uci ? m.uci.slice(0,2) : null);
+      var pt = c.playedTo   || (m.uci ? m.uci.slice(2,4) : null);
+      out.push({ ply:i+1, side:m.side, san:m.san, playedFrom:pf, playedTo:pt,
+                 moveNumber:m.num, evalCp:ev });
+    }
+    return out;
+  }
+  async function maybePlot(){
+    if (P.moves.length < 7) return;
+    try{
+      var r=await api("/api/plotwatch",{review:plotReview()});
+      if (r.fired && r.seed && P.plotShown.indexOf(r.seed.ply)<0){
+        P.plotShown.push(r.seed.ply);
+        showPlotLive(r);
+      }
+    }catch(e){ /* the plot is a flourish; never block the game on it */ }
+  }
+  function showPlotLive(r){
+    var byYou = (r.mover === (P.human==="white"?"White":"Black"));
+    var pl=el("plotLive"); pl.hidden=false;
+    pl.className="plotlive show "+(byYou?"byyou":"bythem");
+    pl.innerHTML='<span class="plotico">💭</span>'+
+      '<span class="plottext"><b>The Plot'+(byYou?" — yours":"")+'.</b> '+esc(r.text)+'</span>';
+  }
+
+  // ================= Campaign / personas =================
+  var CAMP = { byId:{} };
+  async function loadCampaignSelect(){
+    try{
+      var cs=await api("/api/campaign",{});
+      CAMP.byId={}; cs.personas.forEach(function(p){ CAMP.byId[p.id]=p; });
+      var sel=el("personaSel"), keep=sel.value;
+      sel.innerHTML='<option value="">Free play — pick a level</option>';
+      cs.personas.forEach(function(p){
+        var o=document.createElement("option");
+        o.value=p.id; o.disabled=!p.unlocked;
+        o.textContent=p.icon+" "+p.name+" (lvl "+p.level+")"+
+          (!p.unlocked?" 🔒 reach level "+p.unlockLevel
+            :(p.beaten?" ✓":(p.current?" ← next":"")));
+        sel.appendChild(o);
+      });
+      if (keep) sel.value=keep;
+    }catch(e){}
+  }
+  function renderCampaign(cs){
+    el("campaignProg").textContent = cs.beaten+" / "+cs.total+(cs.complete?" — champion!":"");
+    el("campaignLadder").innerHTML = cs.personas.map(function(p){
+      var cls="rung"+(p.beaten?" beaten":"")+(p.current?" current":"")+(p.unlocked?"":" locked");
+      var badge = p.beaten ? '<span class="rbadge win">✓ beaten</span>'
+        : (!p.unlocked ? '<span class="rbadge lock">🔒 level '+p.unlockLevel+'</span>'
+        : (p.current ? '<span class="rbadge now">your next challenge</span>'
+        : '<span class="rbadge">unlocked</span>'));
+      return '<div class="'+cls+'"><span class="ricon">'+p.icon+'</span>'+
+        '<div class="rmeta"><div class="rname">'+esc(p.name)+
+        ' <span class="rlvl">engine lvl '+p.level+'</span></div>'+
+        '<div class="rvoice">“'+esc(p.voice)+'”</div></div>'+badge+'</div>';
+    }).join("");
+  }
+
   // ================= Puzzle Rush (Train) =================
   var PZ = { puzzles:[], idx:0, fen:null, orient:"white", legal:[], sel:null,
     cur:null, solved:0, streak:0, best:0, active:false, busy:false, over:false };
@@ -754,6 +840,13 @@
   el("analogyChk").onchange=function(e){ P.analogy=e.target.checked; renderPanel(); };
   el("glowChk").onchange=function(e){ P.showGlow=e.target.checked; renderPlay(); };
   el("colorSel").onchange=newGame; el("levelSel").onchange=function(e){ P.level=parseInt(e.target.value,10); };
+  el("personaSel").onchange=function(e){
+    var p=CAMP.byId[e.target.value];
+    P.persona = p || null;
+    el("levelField").style.display = p ? "none" : "";
+    if (p){ el("levelSel").value=String(p.level); P.level=p.level; }
+    newGame();
+  };
   document.addEventListener("keydown",function(e){
     if (!document.querySelector('section[data-view="play"]').hidden){
       if(e.key==="ArrowLeft"){ undo(); } return; }
@@ -771,6 +864,6 @@
   el("dfirst").onclick=function(){reviewStep(null,0);}; el("dprev").onclick=function(){reviewStep(-1);};
   el("dnext").onclick=function(){reviewStep(1);}; el("dlast").onclick=function(){reviewStep(null,D.review?D.review.length-1:0);};
 
-  loadHealth(); loadConcepts(); renderPlay();
+  loadHealth(); loadConcepts(); loadCampaignSelect(); renderPlay();
   refreshLegal().then(function(){ setStatus("Your move."); }).catch(function(e){ setStatus("Error: "+e.message,true); });
 })();

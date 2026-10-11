@@ -49,6 +49,91 @@ def _node(c: dict, swing: int | None = None) -> dict:
     return n
 
 
+def live_plot(review: list[dict]) -> dict:
+    """The live, in-game version of the plot: did the move *just played* land a
+    decisive blow that a quiet earlier move set up?
+
+    Unlike find_plot (which tells the whole story after the game), this asks a
+    narrower question at every ply: is the latest move a *strike*, and can its
+    piece be traced back to a quiet *seed* laid well before? When yes, it hands
+    back a short callback so the UI can reveal — at the payoff moment — that the
+    plan was laid long ago. Pure eval math (mover-POV evalCp per ply), no engine.
+
+    Returns {fired: False} unless the latest move completes a real plot.
+    """
+    n = len(review)
+    if n < MIN_GAP + 2:
+        return {"fired": False}
+
+    last = n - 1
+    mover = review[last]["side"]
+
+    # White-POV eval after each ply (evalCp is mover-POV per the review contract).
+    white = []
+    for c in review:
+        cp = c.get("evalCp")
+        if cp is None:
+            cp = int(round(c.get("evalAfter", 0) * 100))
+        white.append(cp if c["side"] == "white" else -cp)
+
+    msign = 1 if mover == "white" else -1
+    mser = [msign * x for x in white]           # mover's advantage after each ply
+
+    # Is the latest move a strike by `mover`? Either a mate, or a big favourable
+    # jump that leaves `mover` decisively winning.
+    is_mate = review[last]["san"].endswith("#")
+    jump = mser[last] - (mser[last - 1] if last > 0 else 0)
+    if not is_mate and not (mser[last] >= DECISIVE and jump >= MIN_BLOW):
+        return {"fired": False}
+
+    # Trace the striking piece back along its own squares (same side only).
+    path = [last]
+    cur_sq = review[last]["playedFrom"]
+    k = last - 1
+    while k >= 0:
+        c = review[k]
+        if c["side"] == mover and c["playedTo"] == cur_sq:
+            path.append(k)
+            cur_sq = c["playedFrom"]
+        k -= 1
+    path.sort()
+
+    seed_i = None
+    for i in path:
+        if i == last:
+            continue
+        prev = mser[i - 1] if i > 0 else 0
+        if _is_quiet(review[i]["san"]) and abs(mser[i] - prev) < QUIET_JUMP and (last - i) >= MIN_GAP:
+            seed_i = i
+            break
+    if seed_i is None:
+        return {"fired": False}
+
+    seed, strike = review[seed_i], review[last]
+    piece = _piece_name(strike["san"])
+    moves_ago = strike["moveNumber"] - seed["moveNumber"]
+    who = "White" if mover == "white" else "Black"
+    if is_mate:
+        text = (f"The plot pays off. That quiet {seed['san']} on move "
+                f"{seed['moveNumber']} set this {piece} on its road — and now, "
+                f"{moves_ago} moves later, {strike['san']} is checkmate.")
+    else:
+        text = (f"The plot pays off. {seed['san']} back on move {seed['moveNumber']} "
+                f"looked like nothing — but it aimed this {piece}, and {moves_ago} "
+                f"moves later {strike['san']} lands the blow.")
+
+    return {
+        "fired": True,
+        "mover": who,
+        "piece": piece,
+        "kind": "mate" if is_mate else "blow",
+        "movesAgo": moves_ago,
+        "seed": _node(seed),
+        "strike": _node(strike, max(0, jump)),
+        "text": text,
+    }
+
+
 def find_plot(review: list[dict]) -> dict:
     if len(review) < 8:
         return {"hasPlot": False, "reason": "too short a game to hold a plot."}

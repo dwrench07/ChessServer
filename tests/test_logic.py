@@ -215,6 +215,56 @@ def test_puzzles_extracted_from_human_mistakes_only():
     assert extract_puzzles([imported]) == []
 
 
+def test_live_plot_fires_on_seeded_mate():
+    from chesscoach.plot import live_plot
+
+    def m(ply, side, san, frm, to, mn, ev):
+        return {"ply": ply, "side": side, "san": san, "playedFrom": frm,
+                "playedTo": to, "moveNumber": mn, "evalCp": ev}
+
+    # Legall's Mate: 4.Nc3 (seed) sets the knight toward d5; 7.Nd5# (strike).
+    review = [
+        m(1, "white", "e4", "e2", "e4", 1, 20), m(2, "black", "e5", "e7", "e5", 1, 0),
+        m(3, "white", "Nf3", "g1", "f3", 2, 20), m(4, "black", "d6", "d7", "d6", 2, 10),
+        m(5, "white", "Bc4", "f1", "c4", 3, 30), m(6, "black", "Bg4", "c8", "g4", 3, 20),
+        m(7, "white", "Nc3", "b1", "c3", 4, 25), m(8, "black", "g6", "g7", "g6", 4, 20),
+        m(9, "white", "Nxe5", "f3", "e5", 5, 120), m(10, "black", "Bxd1", "g4", "d1", 5, -300),
+        m(11, "white", "Bxf7+", "c4", "f7", 6, 400), m(12, "black", "Ke7", "e8", "e7", 6, -500),
+        m(13, "white", "Nd5#", "c3", "d5", 7, 100000),
+    ]
+    r = live_plot(review)
+    assert r["fired"] and r["kind"] == "mate" and r["piece"] == "knight"
+    assert r["seed"]["san"] == "Nc3" and r["seed"]["moveNumber"] == 4
+    assert r["strike"]["san"] == "Nd5#"
+
+    # The same timeline minus the final strike has not paid off yet.
+    assert live_plot(review[:-1])["fired"] is False
+    # A balanced, quiet game never fires.
+    quiet = [m(i, "white" if i % 2 else "black", "Nf3", "g1", "f3", i // 2 + 1, 10)
+             for i in range(1, 13)]
+    assert live_plot(quiet)["fired"] is False
+
+
+def test_campaign_unlock_and_beaten_logic():
+    from chesscoach import personas
+
+    # Fresh player: level 1, no wins -> only the level-1 personas unlocked,
+    # none beaten, the first is the current quest.
+    cs = personas.campaign_state(player_level=1, wins_by_level={})
+    assert cs["beaten"] == 0 and not cs["complete"]
+    assert cs["personas"][0]["unlocked"] and cs["personas"][0]["current"]
+    assert not cs["personas"][-1]["unlocked"]
+
+    # A win at level 4 subsumes every rung at level <= 4 as beaten.
+    cs2 = personas.campaign_state(player_level=4, wins_by_level={4: 1})
+    beaten = [p["name"] for p in cs2["personas"] if p["beaten"]]
+    assert "The Baron" in beaten and "The Novice" in beaten
+    assert not any(p["beaten"] for p in cs2["personas"] if p["level"] > 4)
+    # The current quest is the first unlocked, unbeaten persona.
+    cur = next(p for p in cs2["personas"] if p["current"])
+    assert cur["level"] == 5  # The General
+
+
 def test_puzzles_dedupe_keeps_most_severe():
     from chesscoach.puzzles import extract_puzzles
 

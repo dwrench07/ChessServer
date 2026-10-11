@@ -279,3 +279,36 @@ svg.trend{width:100%;height:90px;display:block}
 .pzmetric span{color:var(--muted);font-size:.68rem;text-transform:uppercase;letter-spacing:.04em}
 #pzOrder{font:inherit;font-size:.82rem;padding:4px 8px;border-radius:7px;border:1px solid var(--line);
   background:var(--surface);color:var(--fg)}
+
+/* ================= The Plot — live banner ================= */
+.plotlive{display:flex;align-items:flex-start;gap:10px;margin:8px 0;padding:11px 13px;border-radius:10px;
+  background:linear-gradient(90deg,color-mix(in srgb,var(--brilliant) 16%,var(--surface)),var(--surface));
+  border:1px solid var(--brilliant);box-shadow:var(--shadow);
+  opacity:0;transform:translateY(-6px);transition:opacity .45s,transform .45s}
+.plotlive.show{opacity:1;transform:none}
+.plotlive.bythem{background:linear-gradient(90deg,color-mix(in srgb,var(--blunder) 15%,var(--surface)),var(--surface));
+  border-color:var(--blunder)}
+.plotlive .plotico{font-size:1.4rem;line-height:1.2;flex:0 0 auto}
+.plotlive .plottext{font-size:.9rem;line-height:1.45}
+.plotlive .plottext b{font-family:var(--font-display)}
+@media(prefers-reduced-motion:reduce){.plotlive{transition:opacity .2s;transform:none}}
+
+/* ================= Campaign ladder ================= */
+.campaignpanel{margin-top:18px}
+.campaignprog{font-family:var(--font-mono);font-size:.82rem;color:var(--muted);font-weight:400;margin-left:8px}
+.campaignladder{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.rung{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;
+  border:1px solid var(--line);background:var(--bg)}
+.rung.locked{opacity:.5;filter:grayscale(.7)}
+.rung.beaten{border-color:var(--good)}
+.rung.current{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 30%,transparent)}
+.rung .ricon{font-size:1.7rem;flex:0 0 auto}
+.rung .rmeta{flex:1;min-width:0}
+.rung .rname{font-weight:600}
+.rung .rlvl{font-family:var(--font-mono);font-size:.72rem;color:var(--muted);font-weight:400;margin-left:6px}
+.rung .rvoice{font-size:.8rem;color:var(--muted);font-style:italic;margin-top:2px}
+.rbadge{flex:0 0 auto;font-size:.7rem;font-weight:600;padding:3px 9px;border-radius:999px;
+  border:1px solid var(--line);white-space:nowrap}
+.rbadge.win{background:color-mix(in srgb,var(--good) 18%,transparent);color:var(--good);border-color:var(--good)}
+.rbadge.now{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent);border-color:var(--accent)}
+.rbadge.lock{color:var(--muted)}

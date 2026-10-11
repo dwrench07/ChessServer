@@ -33,7 +33,7 @@ from chesscoach.engine import Analyzer, find_stockfish
 from chesscoach.explain import (CoachingFacts, explain, ollama_available,
                                 OLLAMA_MODEL, strategic_explanation)
 from chesscoach.motifs import build_motifs
-from chesscoach.plot import find_plot
+from chesscoach.plot import find_plot, live_plot
 from chesscoach import progress
 from chesscoach.strategy import strategic_brief, plan_from_line, phase as game_phase
 
@@ -239,6 +239,8 @@ def api_threat(body: dict) -> dict:
         "sharpness": sharp, "critical": critical, "tactic": tactic,
         "criticalText": "Critical moment — essentially one move holds." if critical else None,
         "tacticText": "\U0001F440 There's something here — look for a tactic." if tactic else None,
+        # Position eval from the side-to-move POV, for the live-plot timeline.
+        "evalCp": best.score_cp,
     }
 
     threat = None
@@ -429,6 +431,21 @@ def api_puzzle_check(body: dict) -> dict:
         "bestCp": best.score_cp,
         "message": message,
     }
+
+
+def api_campaign(_body: dict) -> dict:
+    """The persona ladder annotated with the learner's unlock / beaten state."""
+    from chesscoach import personas
+    prof = store.get_profile()
+    player_level = progress.level_progress(prof["total_xp"])["level"]
+    return personas.campaign_state(player_level, store.wins_by_level())
+
+
+def api_plotwatch(body: dict) -> dict:
+    """Live House-of-Cards callback: did the latest move land a blow a quiet
+    earlier move set up? Pure eval math on the game-so-far (no engine)."""
+    review = body.get("review", [])
+    return live_plot(review)
 
 
 def api_games(body: dict) -> dict:
@@ -626,6 +643,8 @@ ROUTES = {
     "/api/profile": api_profile,
     "/api/puzzles": api_puzzles,
     "/api/puzzle/check": api_puzzle_check,
+    "/api/campaign": api_campaign,
+    "/api/plotwatch": api_plotwatch,
     "/api/games": api_games,
     "/api/game": api_game,
     "/api/dashboard": api_dashboard,

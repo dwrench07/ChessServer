@@ -47,6 +47,7 @@
           </div>
           <div class="winpct" id="winpct" hidden></div>
           <div class="pulsebar" id="pulseBar" hidden></div>
+          <div class="plotlive" id="plotLive" hidden></div>
           <div class="statusline" id="statusline">Your move.</div>
           <div class="controls">
             <button class="ctl" id="newBtn">New game</button>
@@ -76,6 +77,10 @@
               <select id="colorSel"><option value="white" selected>White</option><option value="black">Black</option></select>
             </div>
             <div class="field">
+              <label for="personaSel">Campaign opponent</label>
+              <select id="personaSel"><option value="">Free play — pick a level</option></select>
+            </div>
+            <div class="field" id="levelField">
               <label for="levelSel">Engine level</label>
               <select id="levelSel">
                 <option value="1">1 — easy</option><option value="2">2</option>
@@ -205,6 +210,13 @@
             sloppy win — chess rewards understanding, not just results.</p>
           <div class="kingdomgrid" id="kingdomGrid"></div>
         </div>
+      </div>
+      <div class="panel campaignpanel">
+        <h2>The campaign <span class="campaignprog" id="campaignProg"></span></h2>
+        <p class="kingdomintro">A ladder of opponents, each a character with their own style.
+          Level up to unlock the next challenger; beat one (win a game at their strength or
+          higher) to claim the rung. Standard chess throughout — only the personas change.</p>
+        <div class="campaignladder" id="campaignLadder"></div>
       </div>
     </section>
 

@@ -80,6 +80,22 @@ def test_store_roundtrip_and_dashboard():
     assert dash["qualityCounts"].get("blunder", 0) >= 1
 
 
+def test_store_wins_by_level():
+    # Delta-based, since the module shares one DB across tests.
+    before = store.wins_by_level()
+    store.save_game({"source": "play", "result": "1-0", "human_color": "white",
+                     "level": 5}, [])              # win at 5
+    store.save_game({"source": "play", "result": "0-1", "human_color": "white",
+                     "level": 5}, [])              # loss at 5 (ignored)
+    store.save_game({"source": "play", "result": "0-1", "human_color": "black",
+                     "level": 5}, [])              # black wins at 5
+    store.save_game({"source": "pgn", "result": "1-0", "human_color": None,
+                     "level": 8}, [])              # import, no human side (ignored)
+    after = store.wins_by_level()
+    assert after.get(5, 0) - before.get(5, 0) == 2   # two wins added at level 5
+    assert after.get(8, 0) - before.get(8, 0) == 0   # import never counts
+
+
 def test_progress_xp_rewards_result_and_quality():
     # A won game pays more than a drawn one, which pays more than a loss,
     # at equal accuracy.
