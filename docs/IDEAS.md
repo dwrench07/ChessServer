@@ -123,26 +123,17 @@ tray · coach whisper (one line per move).
 
 ---
 
-## 5. Variants (Direction 2 — a *different* game, not standard chess)
-
-> Standard Stockfish only plays standard chess + Chess960. The rest need
-> **Fairy-Stockfish** (🔌 GPL) or custom rules, and our coaching won't transfer cleanly.
-
-- Chess960 (free on standard Stockfish) *(L)*
-- Fog of war / "Dark chess" *(H, 🔌)* · Crazyhouse drops *(H, 🔌)* ·
-  unit upgrades *(H, custom)* · terrain/forts/resource squares *(H, custom)* ·
-  army-building setup *(M–H)* · king-as-castle with HP *(H, custom)*
-
----
-
-## 6. Enablers / infrastructure
+## 5. Enablers / infrastructure
 
 - Opening-book naming (python-chess polyglot) *(L, free)*
 - Endgame tablebases (python-chess) *(M, free)*
-- Fairy-Stockfish (unlocks variants) *(M, 🔌)*
 - Maia weights (human-like opponent/analysis) *(M–H, 🔌)*
 - MCP server wrapper (use chesscoach inside Claude Code) *(M)*
 - ✅ Licensing + attribution already in place (GPL-3.0, CREDITS.md, OSS survey)
+
+> Note: rule-changing variants (fog of war, Crazyhouse, terrain, army-building)
+> were considered and **dropped** — they're a different game needing a different
+> engine, and our coaching wouldn't transfer. We stay standard chess.
 
 ---
 
