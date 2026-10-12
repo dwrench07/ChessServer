@@ -448,6 +448,14 @@ def api_plotwatch(body: dict) -> dict:
     return live_plot(review)
 
 
+def api_plot(body: dict) -> dict:
+    """The whole-game plot (seed → buildup → strike) from a posted review.
+
+    Engine-free: runs find_plot on the move timeline the client already holds,
+    so the match-recap can narrate the story without a slow re-analysis."""
+    return find_plot(body.get("review", []))
+
+
 def api_games(body: dict) -> dict:
     return {"games": store.list_games(int(body.get("limit", 50)))}
 
@@ -645,6 +653,7 @@ ROUTES = {
     "/api/puzzle/check": api_puzzle_check,
     "/api/campaign": api_campaign,
     "/api/plotwatch": api_plotwatch,
+    "/api/plot": api_plot,
     "/api/games": api_games,
     "/api/game": api_game,
     "/api/dashboard": api_dashboard,

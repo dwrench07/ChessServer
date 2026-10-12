@@ -312,3 +312,17 @@ svg.trend{width:100%;height:90px;display:block}
 .rbadge.win{background:color-mix(in srgb,var(--good) 18%,transparent);color:var(--good);border-color:var(--good)}
 .rbadge.now{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent);border-color:var(--accent)}
 .rbadge.lock{color:var(--muted)}
+
+/* ================= Match recap overlay ================= */
+.recap-ov{position:fixed;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;
+  background:rgba(8,11,18,.82);backdrop-filter:blur(6px);padding:18px}
+.recap-box{display:flex;flex-direction:column;align-items:center;gap:12px;width:100%;max-width:560px}
+.recap-canvas{width:100%;max-width:min(90vw,520px);aspect-ratio:1/1;border-radius:16px;
+  box-shadow:0 20px 70px rgba(0,0,0,.55);background:#0f1420}
+.recap-bar{width:100%;max-width:min(90vw,520px);height:6px;border-radius:999px;background:rgba(255,255,255,.14);overflow:hidden}
+.recap-fill{height:100%;width:0;background:var(--accent);transition:width .08s linear}
+.recap-ctrls{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.recap-ctrls .ctl.primary{background:var(--accent);color:#07130d;border-color:var(--accent);font-weight:700}
+.recap-ctrls .ctl:disabled{opacity:.55;cursor:default}
+.recap-note{min-height:1.4em;color:var(--sub,#cfd6e2);font-size:.82rem;text-align:center;max-width:min(90vw,520px);line-height:1.5}
+.recap-note code{font-family:var(--font-mono);background:rgba(255,255,255,.1);padding:1px 6px;border-radius:5px;font-size:.78rem}

@@ -112,7 +112,7 @@
     moves:[], legal:[], sel:null, last:null, coaching:null, showRef:false, busy:false,
     humanAccs:[], evalWhiteCp:0, saved:false, plan:null, arrows:[], analogy:false,
     showGlow:true, hanging:[], targets:[], streak:0, prevYourWin:50,
-    plotShown:[], persona:null };
+    plotShown:[], persona:null, lastMatch:null };
   var el = function(id){ return document.getElementById(id); };
   var pboard=el("board"), parrows=el("arrows"), ppanel=el("panel"),
       pstatus=el("statusline"), pmoves=el("movegrid"), promo=el("promo"), refBtn=el("refBtn");
@@ -329,7 +329,46 @@
       if (pr){ msg += "  Grade "+pr.grade+", +"+pr.earned+" XP (level "+pr.level+")."; }
       setStatus(msg, true);
       if (pr){ showGrade(pr); }
+      captureMatch(status, acc, pr);
     }catch(e){ /* saving is best-effort */ }
+  }
+
+  // Stash the finished game so the user can make a shareable recap video.
+  function recapMoves(){
+    return P.moves.map(function(m){
+      var c=m.coaching||{};
+      return { san:m.san, fen:m.fen, side:m.side, num:m.num,
+        from: c.playedFrom || (m.uci?m.uci.slice(0,2):null),
+        to:   c.playedTo   || (m.uci?m.uci.slice(2,4):null) };
+    });
+  }
+  function captureMatch(status, acc, pr){
+    var res=resultFrom(status);
+    if (res==="*" || !P.moves.length) return;   // nothing to celebrate
+    var drew = res==="1/2-1/2";
+    var won = !drew && (res==="1-0")===(P.human==="white");
+    P.lastMatch = {
+      youName:"You",
+      oppName: P.persona ? P.persona.name : "Stockfish",
+      oppIcon: P.persona ? P.persona.icon : "🤖",
+      youColor: P.human,
+      result: res,
+      resultText: won ? "Victory!" : (drew ? "A hard-fought draw" : "A worthy fight"),
+      won: won, drew: drew,
+      accuracy: pr ? pr.accuracy : (acc==null?null:acc),
+      grade: pr ? pr.grade : "—",
+      xp: pr ? pr.earned : 0,
+      level: pr ? pr.level : 1,
+      startFen: START,
+      moves: recapMoves(),
+    };
+    var rb=el("recapBtn"); if (rb) rb.disabled=false;
+  }
+  async function openRecap(){
+    if (!P.lastMatch || !window.ChessRecap) return;
+    var m = P.lastMatch;
+    if (!m.plot){ try{ m.plot = await api("/api/plot",{review:plotReview()}); }catch(e){ m.plot={hasPlot:false}; } }
+    ChessRecap.open(m);
   }
 
   function onSquareClick(e){
@@ -356,6 +395,7 @@
     P.fen=START; P.moves=[]; P.sel=null; P.last=null; P.coaching=null; P.showRef=false;
     P.humanAccs=[]; P.evalWhiteCp=0; P.saved=false; P.plan=null; P.arrows=[];
     P.streak=0; P.prevYourWin=50; P.hanging=[]; P.targets=[]; P.plotShown=[];
+    P.lastMatch=null; var rb=el("recapBtn"); if (rb) rb.disabled=true;
     renderPulse(null); el("plotLive").hidden=true;
     P.human=el("colorSel").value; P.level=parseInt(el("levelSel").value,10); P.orient=P.human;
     renderPlay();
@@ -836,6 +876,7 @@
   // wire up play
   el("newBtn").onclick=newGame; el("undoBtn").onclick=undo; el("hintBtn").onclick=hint;
   el("flipBtn").onclick=flip; refBtn.onclick=toggleRef; el("planBtn").onclick=plan;
+  el("recapBtn").onclick=openRecap;
   el("llmChk").onchange=function(e){ P.useLlm=e.target.checked; };
   el("analogyChk").onchange=function(e){ P.analogy=e.target.checked; renderPanel(); };
   el("glowChk").onchange=function(e){ P.showGlow=e.target.checked; renderPlay(); };
